@@ -322,6 +322,23 @@ Pode grep "TODO" --type py
 **依赖**：Phase 1 完成  
 **负责 Agent**：LLM 集成 Agent
 
+> 📖 **本阶段核心交付物 `app/query.py`（Agentic Loop）的设计规格详见** [agent-loop.md](./agent-loop.md)。  
+> Phase 2 实现基础版本（无 Hook、无 Auto-compact）；各组件的完整版本在后续阶段完成（见下表）。
+
+**Agentic Loop 组件分阶段实现一览**（完整设计见 [agent-loop.md](./agent-loop.md)）：
+
+| 组件 | 实现阶段 |
+|------|---------|
+| `query()` / `query_core()` 基础骨架 | **Phase 2** |
+| `ToolUseQueue`（串行版） | **Phase 2** |
+| `check_permissions_and_call_tool()`（无 Hook） | **Phase 2** |
+| `ToolUseQueue`（并发版，`is_concurrency_safe`） | **Phase 3** |
+| System Prompt 动态组装（Plan Mode、Reminders） | **Phase 3** |
+| `app/compact.py` 框架 | **Phase 3** |
+| Hook 系统（4 个注入点） | **Phase 5** |
+| Stop Hook 重入（`MAX_STOP_HOOK_ATTEMPTS`） | **Phase 5** |
+| Auto-compact 完整实现（LLM 摘要） | **Phase 6** |
+
 ### 任务列表
 
 #### 任务 2.1：Anthropic 适配器（Week 5）
@@ -378,20 +395,40 @@ Pode grep "TODO" --type py
 
 ---
 
-#### 任务 2.5：完整会话管理器（Week 7）
+#### 任务 2.5：Agentic Loop 核心引擎（Week 7，Day 1-3）
+
+**文件**：`pode_agent/app/query.py`（新建）
+
+**功能**（对应 [agent-loop.md](./agent-loop.md) Phase 2 范围）：
+- `query()` 外层入口：处理 @mention，委托给 `query_core()`
+- `query_core()` 递归主循环：auto_compact → build_system_prompt → query_llm → 工具执行 → 递归
+- `ToolUseQueue`（串行版本）：单工具顺序执行，验证基本流程（并发版本在 Phase 3 实现）
+- `check_permissions_and_call_tool()`：Pre-hook（占位）→ Pydantic 验证 → 权限检查 → `tool.call()` → Post-hook（占位）
+- `_handle_no_tool_use()`：Stop Hook 占位（直接终止，Phase 5 实现真正的重入）
+
+**注意**：本任务实现的是**不含 Hook、不含 Auto-compact** 的最小可用版本。  
+Hook 系统在 Phase 5 实现，Auto-compact 在 Phase 6 实现。
+
+> 📖 完整设计规格见 [docs/agent-loop.md](./agent-loop.md)
+
+---
+
+#### 任务 2.6：完整会话管理器（Week 7，Day 3-4）
 
 **文件**：`pode_agent/app/session.py`（完整实现）
 
 **功能**：
-- 完整的 `process_input()` 实现（参考 data-flows.md）
-- 工具调用循环（LLM → 工具 → LLM → ...）
+- `process_input()` 实现：构建初始消息，调用 `app/query.py: query()`
 - 成本追踪
 - 会话恢复（从 JSONL 加载历史）
-- 中止处理
+- 中止处理（`abort_event`）
+- 权限决策等待机制（`wait_for_permission_decision()`）
+
+> ⚠️ `process_input()` 本身不实现循环逻辑，仅委托给 `query()`。
 
 ---
 
-#### 任务 2.6：非交互打印模式（Week 7，Day 4-5）
+#### 任务 2.7：非交互打印模式（Week 7，Day 5）
 
 **文件**：`pode_agent/app/print_mode.py`
 
@@ -408,6 +445,13 @@ Pode grep "TODO" --type py
 ---
 
 ### Phase 2 完成标志
+
+**Agentic Loop 核心引擎交付物**（对应 [agent-loop.md](./agent-loop.md)）：
+- [x] `app/query.py`: `query()` / `query_core()` 递归主循环
+- [x] `app/query.py`: `ToolUseQueue`（串行版，Phase 3 升级为并发版）
+- [x] `app/query.py`: `check_permissions_and_call_tool()`（含权限检查，不含 Hook）
+- [ ] Hook 系统（Phase 5 实现）
+- [ ] Auto-compact（Phase 6 实现）
 
 ```bash
 # MVP 可用
@@ -426,10 +470,15 @@ Pode "Run the tests and tell me if they pass"
 
 ## Phase 3：完整工具集
 
-**目标**：实现所有 25+ 个工具。  
+**目标**：实现所有 25+ 个工具，并升级 Agentic Loop 引擎（并发 ToolUseQueue、完整 System Prompt 组装）。  
 **时间**：Weeks 8-10（15 个工作日）  
 **依赖**：Phase 2 完成  
 **负责 Agent**：工具实现 Agent（可以多个 Agent 并行）
+
+**Phase 3 同时完成的 Agentic Loop 升级**（对应 [agent-loop.md](./agent-loop.md)）：
+- `ToolUseQueue` 并发版本（`is_concurrency_safe` + `asyncio.gather` + sibling abort）
+- System Prompt 动态组装完整版（Plan Mode、Reminders 注入）
+- `app/compact.py`：Auto-compact 框架（触发逻辑，压缩策略在 Phase 6 完善）
 
 ### 任务列表（按优先级）
 
@@ -589,10 +638,15 @@ Pode  # 不带参数，启动 REPL
 
 ## Phase 5：MCP 与插件系统
 
-**目标**：实现 MCP 客户端/服务端、插件系统和 ACP 协议。  
+**目标**：实现 MCP 客户端/服务端、插件系统、ACP 协议，以及 Agentic Loop 的 Hook 系统。  
 **时间**：Weeks 14-16（15 个工作日）  
 **依赖**：Phase 3 完成  
 **负责 Agent**：协议集成 Agent
+
+**Phase 5 同时完成的 Agentic Loop 升级**（对应 [agent-loop.md](./agent-loop.md)）：
+- Hook 系统完整实现（4 个注入点：`run_user_prompt_submit_hooks`、`run_pre_tool_use_hooks`、`run_post_tool_use_hooks`、`run_stop_hooks`）
+- Stop Hook 重入机制（`MAX_STOP_HOOK_ATTEMPTS = 5`）
+- `services/hooks/runner.py` 模块
 
 ### 任务列表
 
@@ -671,6 +725,9 @@ Pode  # 不带参数，启动 REPL
 **时间**：Weeks 17-20（20 个工作日）  
 **依赖**：Phase 5 完成
 
+**Phase 6 同时完成的 Agentic Loop 升级**（对应 [agent-loop.md](./agent-loop.md)）：
+- Auto-compact 完整实现（`app/compact.py` 的 LLM 摘要生成策略，Phase 3 仅建立框架）
+
 ### 任务列表
 
 #### 任务 6.1：功能完整性验证（Week 17）
@@ -700,12 +757,17 @@ KODE_REFERENCE_REPO=/path/to/kode-agent python tests/parity/compare.py
 
 ---
 
-#### 任务 6.3：上下文管理优化（Week 18）
+#### 任务 6.3：Auto-compact 完整实现（Week 18）
+
+**文件**：`pode_agent/app/compact.py`（完善 Phase 3 建立的框架）
 
 **功能**：
+- LLM 摘要生成策略（调用 LLM 压缩旧消息）
 - 消息自动压缩（当 token 超阈值时）
 - 智能截断策略（保留最近的对话）
 - 长会话处理
+
+> 📖 设计规格见 [agent-loop.md — Auto-compact：自动上下文压缩](./agent-loop.md#auto-compact自动上下文压缩)
 
 ---
 
@@ -818,7 +880,8 @@ Phase 0 (骨架)
 
 1. 阅读 [modules.md](./modules.md) 中对应模块的规范
 2. 阅读 [api-specs.md](./api-specs.md) 中相关的接口契约
-3. 确认前序阶段的验收标准都已通过
+3. 如果涉及 `app/` 层（Phase 2 及以后），**必须阅读 [agent-loop.md](./agent-loop.md)**
+4. 确认前序阶段的验收标准都已通过
 
 ### 实施每个任务时
 

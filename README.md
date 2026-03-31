@@ -92,6 +92,7 @@
 | 文档                           | 描述 | 受众 |
 |------------------------------|------|------|
 | [架构设计](./docs/architecture.md) | 系统架构、层次划分、模块依赖图 | 架构师、Tech Lead |
+| [核心引擎](./docs/agent-loop.md)   | **Agentic Loop 权威文档**：递归主循环、ToolUseQueue、Hook 系统、Auto-compact | 开发者 |
 | [技术栈](./docs/tech-stack.md)  | Python 技术选型及理由 | 所有开发者 |
 | [模块规范](./docs/modules.md)    | 每个模块的职责、接口、内部结构 | 开发者 |
 | [数据流](./docs/data-flows.md)       | 关键路径时序图（用户输入→工具执行→响应） | 开发者 |
@@ -161,4 +162,4 @@ Phase 5 (Weeks 17-20): 完善与发布
 
 ---
 
-> 📌 **给 Code Agent 的说明**：请按照 [实施计划](./phases.md) 中规定的阶段顺序实现。每个阶段完成后，运行对应的测试套件验证功能正确性，然后再进入下一阶段。详细的接口规范请参考 [模块规范](./modules.md) 和 [API 规范](./api-specs.md)。
+> 📌 **给 Code Agent 的说明**：请按照 [实施计划](./phases.md) 中规定的阶段顺序实现。每个阶段完成后，运行对应的测试套件验证功能正确性，然后再进入下一阶段。详细的接口规范请参考 [模块规范](./modules.md) 和 [API 规范](./api-specs.md)。**核心 Agentic Loop 引擎的运行时行为和设计规格**请参阅 [核心引擎文档](./docs/agent-loop.md)，这是实现 `app/query.py` 的权威参考。

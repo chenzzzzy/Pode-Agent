@@ -192,11 +192,15 @@ pode_agent/
 ```
 pode_agent/
 └── app/
+    ├── query.py            # Agentic Loop 核心引擎（query / query_core / ToolUseQueue）
     ├── repl.py             # REPL 主循环（业务逻辑，无 UI）
     ├── session.py          # 会话状态管理
+    ├── compact.py          # 自动上下文压缩
     ├── orchestrator.py     # 工具调用编排
     └── print_mode.py       # 非交互模式逻辑
 ```
+
+> 📖 **核心引擎详见**：[agent-loop.md](./agent-loop.md) — 详细描述了 `query_core()` 递归主循环、`ToolUseQueue` 并发工具调度器、Hook 系统、Auto-compact、Stop Hook 重入等运行时行为。
 
 ---
 

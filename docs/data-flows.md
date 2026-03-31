@@ -1,7 +1,8 @@
 # Pode-Agent 关键数据流
 
 > 版本：1.0.0 | 状态：草稿 | 更新：2026-03-31  
-> 本文档描述系统中最关键的数据流转路径，使用时序图和伪代码说明。
+> 本文档描述系统中最关键的数据流转路径，使用时序图和伪代码说明。  
+> **核心 Agentic Loop 引擎**（递归主循环、ToolUseQueue、Hook 系统、Auto-compact）的完整设计规格见 [agent-loop.md](./agent-loop.md)。
 
 ---
 
@@ -50,77 +51,31 @@ User         UI (Textual)     SessionManager   AIProvider     BashTool    FileSy
 
 ### 伪代码（SessionManager.process_input）
 
+> 📖 **完整的核心循环伪代码和流程详见** [agent-loop.md](./agent-loop.md)。  
+> 本节仅展示 `process_input` 的高层结构；`query_core()` 的递归逻辑、`ToolUseQueue` 并发调度、Hook 系统等细节请参阅该文档。
+
 ```python
 async def process_input(self, prompt: str) -> AsyncGenerator[SessionEvent, None]:
-    # Step 1: 处理 @mention
-    processed_prompt, file_contents = await process_mentions(prompt, cwd)
-    
-    # Step 2: 添加 UserMessage 到历史
-    user_msg = UserMessage(message=format_user_message(processed_prompt, file_contents))
-    self.messages.append(user_msg)
+    # Step 1: 处理 @mention，构建初始 UserMessage
+    user_msg = await process_mentions(prompt, cwd)
     self.save_message(user_msg)
-    yield SessionEvent(type="user_message", data=user_msg)
-    
-    # Step 3: 主循环（LLM → 工具 → LLM → ...）
-    while True:
-        # 构建系统提示
-        system_prompt = await build_system_prompt(
-            context=await get_project_context(cwd),
-            tools=self.tools,
-        )
-        
-        # LLM 查询
-        assistant_content = []
-        tool_uses = []
-        cost_usd = 0.0
-        
-        params = UnifiedRequestParams(
-            messages=normalize_messages(self.messages),
-            system_prompt=system_prompt,
-            model=get_current_model(),
-            max_tokens=get_max_tokens(),
-            tools=[t.get_json_schema() for t in self.tools],
-        )
-        
-        async for ai_response in query_llm(params):
-            if ai_response.type == "text_delta":
-                yield SessionEvent(type="assistant_delta", data=ai_response.text)
-                assistant_content.append({"type": "text", "text": ai_response.text})
-            
-            elif ai_response.type == "tool_use_end":
-                tool_uses.append(ai_response)
-            
-            elif ai_response.type == "message_done":
-                cost_usd = ai_response.cost_usd or 0.0
-                add_to_total_cost(cost_usd)
-        
-        # 保存 AssistantMessage
-        assistant_msg = AssistantMessage(
-            message={"role": "assistant", "content": assistant_content},
-            cost_usd=cost_usd,
-        )
-        self.messages.append(assistant_msg)
-        self.save_message(assistant_msg)
-        
-        # 如果没有工具调用，结束循环
-        if not tool_uses:
-            yield SessionEvent(type="done")
-            break
-        
-        # Step 4: 执行所有工具（可并发）
-        tool_results = []
-        for tool_use in tool_uses:
-            result = await self._execute_tool_use(tool_use)
-            tool_results.append(result)
-        
-        # Step 5: 将工具结果添加到消息历史
-        tool_result_msg = UserMessage(
-            message=format_tool_results_message(tool_uses, tool_results)
-        )
-        self.messages.append(tool_result_msg)
-        self.save_message(tool_result_msg)
-        
-        yield SessionEvent(type="cost_update", data=get_total_cost())
+    yield SessionEvent(type=USER_MESSAGE, data=user_msg)
+
+    # Step 2: 委托给 Agentic Loop 核心引擎（递归式，非 while True）
+    #   - 自动压缩（auto_compact）
+    #   - 动态构建 system prompt
+    #   - LLM 调用 → 工具执行（ToolUseQueue）→ 递归
+    #   - Hook 注入（pre/post/stop）
+    # 完整实现见 app/query.py: query() / query_core()
+    # 设计规格见 docs/agent-loop.md
+    async for event in query(
+        prompt=prompt,
+        messages=self.messages,
+        tools=self.tools,
+        session=self,
+        options=self._build_query_options(),
+    ):
+        yield event
 ```
 
 ---
@@ -150,67 +105,35 @@ SessionManager       PermissionEngine     UI (Textual)      BashTool        Shel
       │──format_for_llm()  │                  │                  │              │
 ```
 
-### 伪代码（_execute_tool_use）
+### 伪代码（check_permissions_and_call_tool）
+
+> 📖 **单个工具调用的完整管线（含 Hook、权限、Schema 验证）详见** [agent-loop.md — check_permissions_and_call_tool 完整管线](./agent-loop.md#check_permissions_and_call_tool-完整管线)。  
+> 本节仅展示权限检查与工具执行的核心分支，完整 9 步管线请参阅该文档。
 
 ```python
-async def _execute_tool_use(
-    self,
-    tool_use: ToolUseBlock,
-) -> ToolResult:
-    # Step 1: 查找工具
-    tool = find_tool_by_name(self.tools, tool_use.tool_name)
+# app/query.py: check_permissions_and_call_tool (简化视图)
+async def check_permissions_and_call_tool(tool_use, tools, session, options, abort_event):
+    tool = find_tool(tool_use.name, tools)
     if not tool:
-        return ToolResult(error=f"Unknown tool: {tool_use.tool_name}")
-    
-    # Step 2: 验证输入
-    input_model = tool.input_schema()
-    try:
-        parsed_input = input_model.model_validate(tool_use.tool_input)
-    except ValidationError as e:
-        return ToolResult(error=str(e))
-    
-    # Step 3: 额外验证
-    validation = await tool.validate_input(parsed_input)
-    if not validation.result:
-        return ToolResult(error=validation.message)
-    
-    # Step 4: 权限检查
-    if tool.needs_permissions(parsed_input):
-        perm_result = await self.permission_engine.has_permissions(
-            tool.name, tool_use.tool_input, self.permission_context
-        )
-        
-        if perm_result == PermissionResult.NEEDS_PROMPT:
-            # 向 UI 发送权限请求
-            self._pending_permission = asyncio.Event()
-            yield SessionEvent(
-                type="permission_request",
-                data=PermissionRequest(tool_name=tool.name, input=tool_use.tool_input)
-            )
-            # 等待用户决定
-            await self._pending_permission.wait()
-            
-            if self._user_rejected:
-                return ToolResult(error="Permission denied by user")
-        
-        elif perm_result == PermissionResult.DENIED:
-            return ToolResult(error="Permission denied")
-    
-    # Step 5: 执行工具
-    context = ToolUseContext(
-        message_id=self.current_message_id,
-        tool_use_id=tool_use.id,
-        abort_event=self._abort_event,
-        options=self._build_tool_options(),
-    )
-    
-    async def on_progress(output: ToolOutput):
-        yield SessionEvent(type="tool_progress", data=output)
-    
-    result = await collect_tool_result(tool, parsed_input, context, on_progress)
-    
-    yield SessionEvent(type="tool_result", data=result)
-    return result
+        yield ToolResult(error=f"Unknown tool: {tool_use.name}")
+        return
+
+    # Pre-hook → Schema 验证 → 权限检查 → tool.call() → Post-hook
+    # （完整流程见 agent-loop.md）
+
+    perm_result = await session.permission_engine.has_permissions(...)
+    if perm_result == PermissionResult.NEEDS_PROMPT:
+        yield SessionEvent(type=PERMISSION_REQUEST, ...)
+        decision = await session.wait_for_permission_decision()
+        if decision == PermissionDecision.DENY:
+            yield ToolResult(error="Permission denied by user")
+            return
+
+    async for output in tool.call(parsed_input, context):
+        if output.type == "progress":
+            yield SessionEvent(type=TOOL_PROGRESS, data=output)
+        elif output.type == "result":
+            yield SessionEvent(type=TOOL_RESULT, data=format_tool_result(output))
 ```
 
 ---
@@ -540,47 +463,15 @@ async def build_system_prompt(
 
 ## 多工具并发执行
 
-Kode-Agent 支持 AI 在一次响应中返回多个工具调用，并且部分工具可以并发执行。
+当 AI 在一次响应中返回多个工具调用时，`ToolUseQueue` 负责按并发安全性分批调度执行。
 
-### 并发策略
+> 📖 **`ToolUseQueue` 的完整设计（barrier 机制、sibling abort、asyncio 实现方案）详见** [agent-loop.md — ToolUseQueue：并发工具调度器](./agent-loop.md#toolUseQueue并发工具调度器)。
 
-```python
-async def execute_tool_uses(
-    self,
-    tool_uses: list[ToolUseBlock],
-) -> list[ToolResult]:
-    """
-    并发执行多个工具调用。
-    
-    规则：
-    1. 标记为 isConcurrencySafe=True 的工具可以并发
-    2. 其余工具串行执行
-    3. 权限检查不并发（避免重复询问）
-    """
-    results = []
-    
-    # 分组：并发安全 vs 串行
-    concurrent_tools = [tu for tu in tool_uses 
-                        if self._tool_is_concurrency_safe(tu)]
-    serial_tools = [tu for tu in tool_uses 
-                    if not self._tool_is_concurrency_safe(tu)]
-    
-    # 并发执行安全工具
-    if concurrent_tools:
-        concurrent_results = await asyncio.gather(
-            *[self._execute_tool_use(tu) for tu in concurrent_tools],
-            return_exceptions=True
-        )
-        results.extend(concurrent_results)
-    
-    # 串行执行其余工具
-    for tu in serial_tools:
-        result = await self._execute_tool_use(tu)
-        results.append(result)
-    
-    # 按原始顺序返回
-    return reorder_results(results, tool_uses)
-```
+### 并发策略概要
+
+- `is_concurrency_safe = True` 的工具可并发执行（`asyncio.gather`）
+- `is_concurrency_safe = False` 的工具形成 **barrier**，串行等待前一批完成
+- 某个工具失败时，同批次其他工具收到 abort 信号
 
 ### 工具并发安全性标记
 
