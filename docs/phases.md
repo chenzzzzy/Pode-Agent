@@ -1,6 +1,6 @@
 # Pode-Agent 分阶段实施计划
 
-> 版本：1.1.0 | 状态：Phase 0 已完成 | 更新：2026-03-31
+> 版本：1.2.0 | 状态：Phase 1 已完成 | 更新：2026-04-01
 > **给 Code Agent 的说明**：请严格按照阶段顺序实施。每个阶段结束时运行对应验收测试，通过后才能进入下一阶段。
 
 ---
@@ -56,7 +56,7 @@ Phase: │ 0  │    │     1       │    │    2    │    │   3     │  
 
 ```bash
 # 已完成命令
-mkdir Pode-agent && cd Pode-agent
+mkdir Pode-Agent && cd Pode-Agent
 git init
 ```
 
@@ -164,25 +164,26 @@ pytest tests/           # 35 passed
 
 ---
 
-## Phase 1：核心功能
+## Phase 1：核心功能 ✅ 已完成
 
-**目标**：权限系统、核心工具（Bash + 文件 IO + Grep）可用，能执行非 LLM 操作。  
-**时间**：Weeks 2-4（15 个工作日）  
-**依赖**：Phase 0 完成  
+**目标**：权限系统、核心工具（Bash + 文件 IO + Grep）可用，能执行非 LLM 操作。
+**时间**：Weeks 2-4（15 个工作日）
+**依赖**：Phase 0 完成
 **负责 Agent**：核心功能 Agent
+**实际完成日期**：2026-04-01
 
 **Phase 1 工具系统子块**（对应 [tools-system.md](./tools-system.md)）：
 
-| 子功能 | 文件 | 说明 |
+| 子功能 | 文件 | 状态 |
 |--------|------|------|
-| Tool ABC（基类） | `core/tools/base.py` | Phase 0 已完成；Phase 1 完善 `is_read_only()`/`is_concurrency_safe()` |
-| ToolRegistry（基础） | `core/tools/registry.py` | Phase 0 已完成；Phase 1 无需改动 |
-| `get_enabled_tools()`（基础版） | `core/tools/registry.py` | safe_mode 过滤；permission_mode 过滤在 Phase 3 完善 |
-| 权限系统（`PermissionMode.PLAN` 规则） | `core/permissions/engine.py` | 框架就位，Plan Mode 硬拒绝规则在此实现（Phase 3 的 EnterPlanModeTool 依赖它） |
+| Tool ABC（基类） | `core/tools/base.py` | ✅ 已在 Phase 0 完成，Phase 1 验证 `is_read_only()`/`is_concurrency_safe()` |
+| ToolRegistry（基础） | `core/tools/registry.py` | ✅ 已在 Phase 0 完成，Phase 1 无需改动 |
+| `get_enabled_tools()`（基础版） | `core/tools/registry.py` | ✅ safe_mode 过滤已实现；permission_mode 过滤在 Phase 3 完善 |
+| 权限系统（`PermissionMode.PLAN` 规则） | `core/permissions/engine.py` | ✅ 框架就位，Plan Mode 硬拒绝规则已实现（Phase 3 的 EnterPlanModeTool 依赖它） |
 
 ### 任务列表
 
-#### 任务 1.1：权限系统（Week 2，Day 1-3）
+#### 任务 1.1：权限系统（Week 2，Day 1-3） ✅
 
 **文件**：
 - `pode_agent/core/permissions/engine.py`
@@ -191,6 +192,7 @@ pytest tests/           # 35 passed
 - `pode_agent/core/permissions/rules/plan_mode.py`
 - `pode_agent/core/permissions/store.py`
 - `pode_agent/core/permissions/__init__.py`
+- `pode_agent/core/permissions/types.py`
 
 **关键实现**：
 
@@ -213,15 +215,15 @@ DANGEROUS_PATTERNS = [
 ```
 
 **验收标准**：
-- [ ] `is_safe_bash_command("ls -la")` → True
-- [ ] `is_safe_bash_command("rm -rf /")` → False
-- [ ] `PermissionEngine.has_permissions("bash", {"command": "ls"})` → ALLOWED（无需提示）
-- [ ] `PermissionEngine.has_permissions("bash", {"command": "rm -rf ."})` → NEEDS_PROMPT
-- [ ] 权限决定可以持久化到 ProjectConfig 并重新加载
+- [x] `is_safe_bash_command("ls -la")` → True
+- [x] `is_safe_bash_command("rm -rf /")` → False
+- [x] `PermissionEngine.has_permissions("bash", {"command": "ls"})` → ALLOWED（无需提示）
+- [x] `PermissionEngine.has_permissions("bash", {"command": "rm -rf ."})` → NEEDS_PROMPT
+- [x] 权限决定可以持久化到 ProjectConfig 并重新加载
 
 ---
 
-#### 任务 1.2：BashTool（Week 2，Day 4-5）
+#### 任务 1.2：BashTool（Week 2，Day 4-5） ✅
 
 **文件**：`pode_agent/tools/system/bash.py`
 
@@ -230,52 +232,52 @@ DANGEROUS_PATTERNS = [
 - 超时控制（默认 120 秒）
 - 捕获 stdout、stderr、exit_code
 - 支持中止（通过 `abort_event`）
-- 后台任务支持（`background=True` 时异步运行）
+- 后台任务支持（`background=True` 时异步运行，完整版在 Phase 3）
 
 **验收标准**：
-- [ ] `BashTool().call(BashInput(command="echo hello"))` → stdout="hello"
-- [ ] 超时时返回错误，不挂起
-- [ ] 中止信号触发时停止执行
-- [ ] `is_read_only()` → False
-- [ ] `needs_permissions({"command": "ls"})` → False（安全命令）
-- [ ] `needs_permissions({"command": "npm install"})` → True
+- [x] `BashTool().call(BashInput(command="echo hello"))` → stdout="hello"
+- [x] 超时时返回错误，不挂起
+- [x] 中止信号触发时停止执行
+- [x] `is_read_only()` → False
+- [x] `needs_permissions({"command": "ls"})` → False（安全命令）
+- [x] `needs_permissions({"command": "npm install"})` → True
 
 ---
 
-#### 任务 1.3：文件系统工具（Week 3）
+#### 任务 1.3：文件系统工具（Week 3） ✅
 
 按优先级实现：
 
-1. **FileReadTool**（Day 1）
+1. **FileReadTool** ✅
    - 读取文件内容
    - 支持行号范围（`offset`, `limit`）
    - 处理大文件截断
    - 记录读取时间戳到 `context.read_file_timestamps`
 
-2. **FileWriteTool**（Day 2）
+2. **FileWriteTool** ✅
    - 写入/创建新文件
    - 不允许覆盖已存在文件（使用 FileEditTool）
    - 创建必要的父目录
 
-3. **FileEditTool**（Day 3-4）
+3. **FileEditTool** ✅
    - 精确的字符串替换（old_str → new_str）
    - 验证 old_str 在文件中唯一出现
    - 保存文件前校验
    - 提供 diff 输出
 
-4. **GlobTool**（Day 5）
+4. **GlobTool** ✅
    - 使用 Python `glob.glob()` / `pathlib.Path.glob()`
    - 支持 `**` 递归匹配
    - 限制返回数量（默认 100 个）
 
 **验收标准**：
-- [ ] 每个工具有完整的单元测试
-- [ ] FileEditTool 在 old_str 不唯一时抛出有用的错误
-- [ ] 文件路径安全检查（不允许访问 cwd 之外的文件）
+- [x] 每个工具有完整的单元测试
+- [x] FileEditTool 在 old_str 不唯一时抛出有用的错误
+- [x] 文件路径安全检查（不允许访问 cwd 之外的文件）
 
 ---
 
-#### 任务 1.4：GrepTool（Week 4，Day 1-2）
+#### 任务 1.4：GrepTool（Week 4，Day 1-2） ✅
 
 **文件**：`pode_agent/tools/search/grep.py`
 
@@ -287,18 +289,18 @@ DANGEROUS_PATTERNS = [
 
 ---
 
-#### 任务 1.5：LsTool（Week 4，Day 3）
+#### 任务 1.5：LsTool（Week 4，Day 3） ✅
 
 **文件**：`pode_agent/tools/agent/ls.py`
 
 **实现**：
 - 列出目录内容
 - 显示文件类型（目录/文件/链接）
-- 基本的 `.gitignore` 过滤
+- 基本的 `.gitignore` 过滤（跳过 `__pycache__`、`.git`、隐藏文件）
 
 ---
 
-#### 任务 1.6：会话基础（Week 4，Day 4-5）
+#### 任务 1.6：会话基础（Week 4，Day 4-5） ✅
 
 **文件**：
 - `pode_agent/app/session.py`（骨架）
@@ -307,11 +309,11 @@ DANGEROUS_PATTERNS = [
 **实现**：
 - JSONL 日志写入（save_message）
 - JSONL 日志读取（load_messages_from_log）
-- 日志文件命名（`~/.Pode/logs/YYYY-MM-DD_session_fork_N.jsonl`）
+- 日志文件命名（`~/.pode/logs/YYYY-MM-DD_session_fork_N.jsonl`）
 
 ---
 
-### Phase 1 完成标志
+### Phase 1 完成标志 ✅
 
 ```bash
 # 非 LLM 工具可以独立测试
@@ -321,6 +323,23 @@ Pode file read README.md
 Pode file edit src/main.py --old "foo" --new "bar"
 Pode grep "TODO" --type py
 ```
+
+**验收验证**：
+```bash
+uv run mypy pode_agent/        # Success: no issues found in 44 source files
+uv run ruff check pode_agent/  # All checks passed
+uv run pytest tests/ -v        # 198 passed, 1 skipped
+```
+
+**实际交付物**：
+- 44 个 Python 源文件（pode_agent/）
+- 11 个测试文件（tests/）
+- 198 个单元测试，全部通过（1 个 Windows symlink 测试跳过）
+- 权限系统（PermissionMode 枚举、PermissionEngine 8 步检查、bash 安全规则、文件路径安全、Plan Mode 硬拒绝）
+- 7 个工具实现：BashTool、FileReadTool、FileWriteTool、FileEditTool、GlobTool、GrepTool、LsTool
+- SessionManager 骨架 + JSONL 日志读写
+- mypy strict mode 零错误，ruff 零告警
+- 修复了 `infra/shell.py` 中的超时处理 bug（abort_event + timeout 竞态条件）
 
 ---
 
@@ -896,11 +915,11 @@ python -m build && twine upload dist/*
 
 | 标准 | Phase 0 | Phase 1 | Phase 2 | Phase 3 | Phase 4 | Phase 5 | Phase 6 |
 |------|---------|---------|---------|---------|---------|---------|---------|
-| mypy 零错误 | ✅ Done | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| ruff lint 通过 | ✅ Done | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| pytest 通过 | ✅ Done (35) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 新功能有测试 | ✅ Done | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 文档更新 | ✅ Done | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| mypy 零错误 | ✅ Done | ✅ Done (44 files) | ✅ | ✅ | ✅ | ✅ | ✅ |
+| ruff lint 通过 | ✅ Done | ✅ Done | ✅ | ✅ | ✅ | ✅ | ✅ |
+| pytest 通过 | ✅ Done (35) | ✅ Done (198) | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 新功能有测试 | ✅ Done | ✅ Done (11 files) | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 文档更新 | ✅ Done | ✅ Done | ✅ | ✅ | ✅ | ✅ | ✅ |
 
 ### 最终发布验收标准
 
