@@ -2,7 +2,9 @@
 
 > 版本：1.0.0 | 状态：草稿 | 更新：2026-03-31  
 > 本文档描述系统中最关键的数据流转路径，使用时序图和伪代码说明。  
-> **核心 Agentic Loop 引擎**（递归主循环、ToolUseQueue、Hook 系统、Auto-compact）的完整设计规格见 [agent-loop.md](./agent-loop.md)。
+> **核心 Agentic Loop 引擎**（递归主循环、ToolUseQueue、Hook 系统、Auto-compact）的完整设计规格见 [agent-loop.md](./agent-loop.md)。  
+> **工具系统**（注册/发现/启用/权限/并发）的完整设计规格见 [tools-system.md](./tools-system.md)。  
+> **计划模式**（先规划后执行、JSONL 存储）的完整设计规格见 [plan-mode.md](./plan-mode.md)。
 
 ---
 
@@ -16,6 +18,7 @@
 6. [MCP 工具调用流程](#mcp-工具调用流程)
 7. [上下文构建流程](#上下文构建流程)
 8. [多工具并发执行](#多工具并发执行)
+9. [计划模式数据流](#计划模式数据流)
 
 ---
 
@@ -83,6 +86,9 @@ async def process_input(self, prompt: str) -> AsyncGenerator[SessionEvent, None]
 ## 工具调用流程
 
 **场景**：AI 调用 BashTool 执行 `npm test`。
+
+> 📖 **工具系统全貌**（注册/发现/启用过滤/LLM 连接/权限耦合/并发语义）详见 [tools-system.md](./tools-system.md)。  
+> 本节仅展示单次工具调用的时序；工具在 Agent Loop 中的整体流转见 [agent-loop.md](./agent-loop.md)。
 
 ### 时序图
 
@@ -465,7 +471,8 @@ async def build_system_prompt(
 
 当 AI 在一次响应中返回多个工具调用时，`ToolUseQueue` 负责按并发安全性分批调度执行。
 
-> 📖 **`ToolUseQueue` 的完整设计（barrier 机制、sibling abort、asyncio 实现方案）详见** [agent-loop.md — ToolUseQueue：并发工具调度器](./agent-loop.md#toolUseQueue并发工具调度器)。
+> 📖 **`ToolUseQueue` 的完整设计（barrier 机制、sibling abort、asyncio 实现方案）详见** [agent-loop.md — ToolUseQueue：并发工具调度器](./agent-loop.md#toolUseQueue并发工具调度器)。  
+> 📖 **工具并发安全性（`is_concurrency_safe`）的定义和各工具标记详见** [tools-system.md — 并发语义](./tools-system.md#并发语义)。
 
 ### 并发策略概要
 
@@ -485,3 +492,59 @@ async def build_system_prompt(
 | FileEditTool | ❌ False | 写操作，不可并发 |
 | FileWriteTool | ❌ False | 写操作，不可并发 |
 | AskUserQuestionTool | ❌ False | 交互，不可并发 |
+
+---
+
+## 计划模式数据流
+
+**场景**：用户请求复杂任务，Agent 先进入计划模式探索，生成计划，用户批准后执行。
+
+> 📖 **Plan Mode 完整设计**（数据结构、JSONL 存储、Enter/Exit 工具、分阶段实现）详见 [plan-mode.md](./plan-mode.md)。  
+> 本节仅展示高层时序；工具层权限硬拒绝机制见 [tools-system.md § Plan Mode 硬拒绝](./tools-system.md#plan-mode-硬拒绝permission-mode-b-策略)。
+
+### 时序图
+
+```
+User         UI (Textual)    SessionManager    Agent Loop       FileSystem
+ │                │                │                │               │
+ │──(复杂任务)───▶│                │                │               │
+ │                │──process_input─▶│               │               │
+ │                │                │──query_core()──▶               │
+ │                │                │                │               │
+ │                │                │  LLM 调用 EnterPlanModeTool    │
+ │                │                │                │               │
+ │                │◀──(mode:plan)──────────────────│               │
+ │                │                │                │               │
+ │                │                │  [探索阶段：只读工具]            │
+ │                │                │                │──FileRead────▶│
+ │                │                │                │◀──content─── │
+ │                │                │                │──GrepTool────▶│
+ │                │                │                │◀──matches─── │
+ │                │                │                │               │
+ │                │  LLM 调用 ExitPlanModeTool（含 Plan 对象）        │
+ │                │                │──write_jsonl(plan_created)     │
+ │                │◀──(plan_display)───────────────│               │
+ │◀──(审批界面)───│                │                │               │
+ │                │                │                │               │
+ │──(批准)────────▶│                │                │               │
+ │                │──on_plan_approved()──▶          │               │
+ │                │                │──write_jsonl(plan_approved)    │
+ │                │                │──query_core()──▶               │
+ │                │                │                │               │
+ │                │                │  [执行阶段：完整工具集]           │
+ │                │                │                │──FileEdit────▶│
+ │                │                │                │◀──done───────│
+ │                │                │──write_jsonl(plan_step_done)   │
+ │◀──(进度更新)───│                │                │               │
+```
+
+### 关键状态转换
+
+```
+PermissionMode 变化：
+  DEFAULT → PLAN      （EnterPlanModeTool 调用时）
+  PLAN    → DEFAULT   （ExitPlanModeTool 调用时）
+
+JSONL 事件序列：
+  plan_created  → plan_approved → plan_step_start → plan_step_done(×N) → plan_done
+```
