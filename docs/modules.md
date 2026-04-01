@@ -150,6 +150,9 @@ class McpServerConfig(BaseModel):
 
 **职责**：判断工具是否有权限执行，管理权限存储，定义各工具的安全规则。
 
+> 📖 **权限系统与工具系统的完整耦合关系**（needsPermissions、PermissionMode、批量权限）详见 [tools-system.md — 权限系统与工具系统的耦合点](./tools-system.md#权限系统与工具系统的耦合点)。  
+> **Plan Mode 对 PermissionMode 的切换逻辑**详见 [plan-mode.md — 权限系统与 Plan Mode](./plan-mode.md#权限系统与-plan-mode)。
+
 **文件结构**：
 ```
 pode_agent/core/permissions/
@@ -241,6 +244,9 @@ def is_safe_bash_command(command: str) -> bool:
 ### `tools/base` 模块
 
 **职责**：定义工具系统的抽象基类、数据类型和工具注册表。
+
+> 📖 **工具系统完整规格**（目录结构、注册/发现、Schema 转换、权限耦合）详见 [tools-system.md](./tools-system.md)。  
+> **Plan Mode 对工具集的约束**（只读工具允许、写操作拒绝）详见 [plan-mode.md — 权限系统与 Plan Mode](./plan-mode.md#权限系统与-plan-mode)。
 
 **文件结构**：
 ```
@@ -675,6 +681,8 @@ async def build_system_prompt(
 
 ## Tools 层模块
 
+> 📖 **工具系统完整规格**（目录结构、注册/发现、Schema 转换、权限耦合、并发语义）详见 [tools-system.md](./tools-system.md)。
+
 每个 Tool 文件遵循统一结构：
 
 ```python
@@ -881,7 +889,9 @@ class SessionEvent(BaseModel):
 
 **职责**：Agentic Loop 核心引擎 —— `query()`、`query_core()`、`ToolUseQueue`、`check_permissions_and_call_tool()`。
 
-> 📖 **本模块的完整设计规格（递归主循环、并发调度、Hook 注入、Auto-compact、Stop Hook 重入）详见** [agent-loop.md](./agent-loop.md)。
+> 📖 **本模块的完整设计规格（递归主循环、并发调度、Hook 注入、Auto-compact、Stop Hook 重入）详见** [agent-loop.md](./agent-loop.md)。  
+> **工具注入到 Agentic Loop 的流程**（get_tools → filter_tools_by_config → query）详见 [tools-system.md — 工具注入到 Agentic Loop](./tools-system.md#工具注入到-agentic-loop)。  
+> **Plan Mode 在循环中的 System Prompt 注入点**详见 [plan-mode.md — 与 Agent Loop 的耦合点](./plan-mode.md#与-agent-loop-的耦合点)。
 
 ```python
 # 核心入口（由 SessionManager.process_input 调用）
@@ -962,6 +972,42 @@ async def run_print_mode(
     """
     非交互模式：执行单次查询并打印结果。
     返回退出码（0=成功，1=错误）。
+    """
+```
+
+---
+
+### `app/plan_state.py`
+
+**职责**：Plan Mode 状态管理 —— 激活/停用、Slug 生成、计划文件路径、System Prompt 追加内容生成。
+
+> 📖 **完整的 Plan Mode 设计规格详见** [plan-mode.md](./plan-mode.md)。
+
+```python
+# 核心状态函数
+def enter_plan_mode(context: ToolUseContext) -> dict:
+    """激活 Plan Mode，设置 conversation key 下的状态"""
+
+def exit_plan_mode(context: ToolUseContext) -> dict:
+    """停用 Plan Mode，触发 re-entry 标记"""
+
+def is_plan_mode_enabled(context: ToolUseContext | None = None) -> bool:
+    """查询当前会话是否处于 Plan Mode"""
+
+def get_plan_file_path(agent_id: str | None, conversation_key: str | None) -> str:
+    """获取计划文件路径（~/.pode/plans/{slug}.md）"""
+
+def read_plan_file(agent_id: str | None, conversation_key: str | None) -> tuple[str, bool]:
+    """读取计划文件，返回 (content, exists)"""
+
+def get_plan_mode_system_prompt_additions(
+    messages: list[Message],
+    context: ToolUseContext,
+) -> list[str]:
+    """
+    生成 Plan Mode 的 system-reminder 追加内容。
+    频率控制：首次必定注入，之后每 5 个 assistant 轮次才再注入。
+    返回 <system-reminder>...</system-reminder> 格式的字符串列表。
     """
 ```
 

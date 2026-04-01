@@ -201,6 +201,7 @@ pode_agent/
 ```
 
 > 📖 **核心引擎详见**：[agent-loop.md](./agent-loop.md) — 详细描述了 `query_core()` 递归主循环、`ToolUseQueue` 并发工具调度器、Hook 系统、Auto-compact、Stop Hook 重入等运行时行为。
+> 📖 **Plan Mode 状态管理**（`plan_state.py`）也位于应用层，详见 [plan-mode.md](./plan-mode.md)。
 
 ---
 
@@ -276,6 +277,8 @@ infra ← core ← services ← tools ← app ← ui ← entrypoints
 ## 核心组件详述
 
 ### 1. Tool 抽象基类（`core/tools/base.py`）
+
+> 📖 **工具系统完整规格（目录结构、注册/发现、与 LLM 的连接、权限耦合）详见** [tools-system.md](./tools-system.md)。
 
 ```python
 from abc import ABC, abstractmethod
@@ -399,6 +402,9 @@ class SessionManager:
 ---
 
 ### 4. Permission Engine（`core/permissions/engine.py`）
+
+> 📖 **权限系统与工具系统的完整耦合关系详见** [tools-system.md — 权限系统与工具系统的耦合点](./tools-system.md#权限系统与工具系统的耦合点)；  
+> **Plan Mode 下的权限约束详见** [plan-mode.md — 权限系统与 Plan Mode](./plan-mode.md#权限系统与-plan-mode)。
 
 ```python
 class PermissionEngine:

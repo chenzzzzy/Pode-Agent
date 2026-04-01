@@ -108,6 +108,7 @@ SessionManager       PermissionEngine     UI (Textual)      BashTool        Shel
 ### 伪代码（check_permissions_and_call_tool）
 
 > 📖 **单个工具调用的完整管线（含 Hook、权限、Schema 验证）详见** [agent-loop.md — check_permissions_and_call_tool 完整管线](./agent-loop.md#check_permissions_and_call_tool-完整管线)。  
+> **工具权限系统的完整规格（needsPermissions、PermissionMode、批量/单次权限）详见** [tools-system.md — 权限系统与工具系统的耦合点](./tools-system.md#权限系统与工具系统的耦合点)。  
 > 本节仅展示权限检查与工具执行的核心分支，完整 9 步管线请参阅该文档。
 
 ```python
@@ -465,7 +466,8 @@ async def build_system_prompt(
 
 当 AI 在一次响应中返回多个工具调用时，`ToolUseQueue` 负责按并发安全性分批调度执行。
 
-> 📖 **`ToolUseQueue` 的完整设计（barrier 机制、sibling abort、asyncio 实现方案）详见** [agent-loop.md — ToolUseQueue：并发工具调度器](./agent-loop.md#toolUseQueue并发工具调度器)。
+> 📖 **`ToolUseQueue` 的完整设计（barrier 机制、sibling abort、asyncio 实现方案）详见** [agent-loop.md — ToolUseQueue：并发工具调度器](./agent-loop.md#toolUseQueue并发工具调度器)。  
+> **`is_concurrency_safe` 的定义与工具并发语义详见** [tools-system.md — 并发执行语义](./tools-system.md#并发执行语义)。
 
 ### 并发策略概要
 
@@ -485,3 +487,36 @@ async def build_system_prompt(
 | FileEditTool | ❌ False | 写操作，不可并发 |
 | FileWriteTool | ❌ False | 写操作，不可并发 |
 | AskUserQuestionTool | ❌ False | 交互，不可并发 |
+
+---
+
+## Plan Mode 工作流数据流
+
+**场景**：用户请求实现新功能，Agent 主动进入 Plan Mode 进行探索和规划。
+
+> 📖 **Plan Mode 完整设计（五阶段工作流、System Prompt 注入、权限约束）详见** [plan-mode.md](./plan-mode.md)。
+
+### 时序图（概要）
+
+```
+User        UI (Textual)     SessionManager   PermissionEngine   Agent Loop
+ │               │                │                 │                │
+ │──(input)─────▶│                │                 │                │
+ │               │──process_input─▶                │                │
+ │               │                │──query_core()──────────────────▶│
+ │               │                │                 │  LLM 决定调用 EnterPlanMode
+ │               │◀──(permission_request: EnterPlanMode)─────────────│
+ │──(approve)───▶│                │                 │                │
+ │               │──(approved)───▶│                 │                │
+ │               │                │                 │◀──set_permission_mode(PLAN)
+ │               │◀──(显示计划模式指示)              │                │
+ │               │                │                 │                │
+ │               │         [只读工具调用: Glob/Grep/FileRead 探索代码库]
+ │               │                │                 │                │
+ │               │                │                 │  LLM 决定调用 ExitPlanMode
+ │               │◀──(显示计划内容供用户审阅)────────────────────────│
+ │──(approve)───▶│                │                 │                │
+ │               │──(approved)───▶│                 │◀──set_permission_mode(DEFAULT)
+ │               │                │                 │                │
+ │               │         [完整工具集恢复，Agent 开始实现计划]
+```

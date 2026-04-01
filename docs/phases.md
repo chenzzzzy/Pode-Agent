@@ -171,6 +171,9 @@ pytest tests/           # 35 passed
 **依赖**：Phase 0 完成  
 **负责 Agent**：核心功能 Agent
 
+> 📖 **工具系统的目录结构、注册方式、权限耦合**详见 [tools-system.md](./tools-system.md)。  
+> **Phase 1 仅实现 `PermissionMode.PLAN` 的 enum 定义**，Plan Mode 完整骨架在 Phase 3 实现（见 [plan-mode.md — 分阶段实现建议](./plan-mode.md#分阶段实现建议)）。
+
 ### 任务列表
 
 #### 任务 1.1：权限系统（Week 2，Day 1-3）
@@ -475,6 +478,9 @@ Pode "Run the tests and tell me if they pass"
 **依赖**：Phase 2 完成  
 **负责 Agent**：工具实现 Agent（可以多个 Agent 并行）
 
+> 📖 **工具系统完整规格**（注册/发现/权限/并发）详见 [tools-system.md](./tools-system.md)。  
+> **Plan Mode 骨架**（EnterPlanModeTool/ExitPlanModeTool/plan_state.py/System Prompt 注入）在本阶段实现，完整设计详见 [plan-mode.md](./plan-mode.md)。
+
 **Phase 3 同时完成的 Agentic Loop 升级**（对应 [agent-loop.md](./agent-loop.md)）：
 - `ToolUseQueue` 并发版本（`is_concurrency_safe` + `asyncio.gather` + sibling abort）
 - System Prompt 动态组装完整版（Plan Mode、Reminders 注入）
@@ -508,10 +514,21 @@ Pode "Run the tests and tell me if they pass"
 |------|------|---------|
 | AskExpertModelTool | `tools/ai/ask_expert.py` | 调用另一个 AI 模型 |
 | SkillTool | `tools/ai/skill.py` | 执行已安装的 Skill |
-| EnterPlanModeTool | `tools/agent/plan_mode.py` | 进入计划模式 |
-| ExitPlanModeTool | `tools/agent/plan_mode.py` | 退出计划模式 |
+| EnterPlanModeTool | `tools/agent/plan_mode.py` | 进入计划模式（详见 [plan-mode.md](./plan-mode.md)） |
+| ExitPlanModeTool | `tools/agent/plan_mode.py` | 退出计划模式（详见 [plan-mode.md](./plan-mode.md)） |
 | TaskTool | `tools/agent/task.py` | 子任务管理 |
 | SlashCommandTool | `tools/interaction/slash_command.py` | 执行自定义命令 |
+
+**Phase 3 Plan Mode 骨架实现清单**（对应 [plan-mode.md — 分阶段实现建议](./plan-mode.md#分阶段实现建议)）：
+
+| 组件 | 文件 | 说明 |
+|------|------|------|
+| Plan Mode 状态机 | `app/plan_state.py` | `enter/exit/is_enabled`、Slug 生成、计划文件路径 |
+| Plan Mode 工具 | `tools/agent/plan_mode.py` | `EnterPlanModeTool` / `ExitPlanModeTool` |
+| 权限引擎 Plan Mode 约束 | `core/permissions/engine.py` | `PermissionMode.PLAN` 下只允许只读工具 |
+| System Prompt 注入 | `app/query.py` `build_system_prompt()` | `get_plan_mode_system_prompt_additions()` |
+| canUseTool 拦截 | `app/query.py` | Plan Mode 下拦截非只读工具 |
+| `TURNS_BETWEEN_ATTACHMENTS` 节流 | `app/plan_state.py` | 避免 reminder 占用过多 token |
 
 #### Web 搜索提供商（Week 10）
 
@@ -535,6 +552,14 @@ Pode "Search the web for 'Python asyncio best practices' and summarize"
 Pode "Read my notebook.ipynb and explain what it does"
 # 期望：调用 NotebookReadTool，返回解释
 ```
+
+**Plan Mode 骨架验收标准**（完整规格见 [plan-mode.md](./plan-mode.md)）：
+- [ ] Agent 在面对复杂任务时主动调用 `EnterPlanModeTool`
+- [ ] Plan Mode 激活期间，`FileWriteTool`/`BashTool` 的写操作被拒绝，返回"permission denied"
+- [ ] `GlobTool`/`GrepTool`/`FileReadTool` 在 Plan Mode 下正常可用
+- [ ] `ExitPlanModeTool` 调用后恢复完整工具集
+- [ ] 计划文件正确写入 `~/.pode/plans/{slug}.md`
+- [ ] system-reminder 在 Plan Mode 激活时注入 LLM 上下文
 
 ---
 

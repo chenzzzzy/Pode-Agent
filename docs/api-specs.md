@@ -334,6 +334,9 @@ PLAN_MODE_ALLOWED_TOOLS: frozenset[str] = frozenset([
 
 **模块**：`pode_agent.core.tools`
 
+> 📖 **工具系统完整规格**（目录结构、注册/发现、get_tools()、Schema 转换、权限耦合、并发语义）详见 [tools-system.md](./tools-system.md)。  
+> **Plan Mode 工具**（EnterPlanModeTool / ExitPlanModeTool）及 Plan State API 详见 [plan-mode.md](./plan-mode.md)。
+
 ```python
 # === 数据类型（可参考 modules.md 中的完整定义）===
 
@@ -890,6 +893,8 @@ async def build_system_prompt(
 **模块**：`pode_agent.app.session`
 
 > 📖 **`SessionManager.process_input()` 所调用的核心 Agentic Loop 设计规格详见** [agent-loop.md](./agent-loop.md)。  
+> **工具注入到会话的流程**（get_tools → filter_tools_by_config → SessionManager）详见 [tools-system.md — 工具注入到 Agentic Loop](./tools-system.md#工具注入到-agentic-loop)。  
+> **Plan Mode 在会话中的激活/退出**（EnterPlanModeTool → set_permission_mode(PLAN)）详见 [plan-mode.md](./plan-mode.md)。  
 > 本节仅描述 Session API 的类型契约；循环引擎的递归结构、`ToolUseQueue`、Hook 系统请参阅该文档。
 
 ```python
