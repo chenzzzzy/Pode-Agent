@@ -171,6 +171,15 @@ pytest tests/           # 35 passed
 **依赖**：Phase 0 完成  
 **负责 Agent**：核心功能 Agent
 
+**Phase 1 工具系统子块**（对应 [tools-system.md](./tools-system.md)）：
+
+| 子功能 | 文件 | 说明 |
+|--------|------|------|
+| Tool ABC（基类） | `core/tools/base.py` | Phase 0 已完成；Phase 1 完善 `is_read_only()`/`is_concurrency_safe()` |
+| ToolRegistry（基础） | `core/tools/registry.py` | Phase 0 已完成；Phase 1 无需改动 |
+| `get_enabled_tools()`（基础版） | `core/tools/registry.py` | safe_mode 过滤；permission_mode 过滤在 Phase 3 完善 |
+| 权限系统（`PermissionMode.PLAN` 规则） | `core/permissions/engine.py` | 框架就位，Plan Mode 硬拒绝规则在此实现（Phase 3 的 EnterPlanModeTool 依赖它） |
+
 ### 任务列表
 
 #### 任务 1.1：权限系统（Week 2，Day 1-3）
@@ -339,6 +348,15 @@ Pode grep "TODO" --type py
 | Stop Hook 重入（`MAX_STOP_HOOK_ATTEMPTS`） | **Phase 5** |
 | Auto-compact 完整实现（LLM 摘要） | **Phase 6** |
 
+**Phase 2 工具系统子块**（对应 [tools-system.md](./tools-system.md)）：
+
+| 子功能 | 文件 | 说明 |
+|--------|------|------|
+| `ToolDefinition` 数据类型 | `services/ai/base.py` | 传给 LLM 的工具定义结构 |
+| `tool_to_definition()` 转换函数 | `core/tools/base.py` 或 `services/ai/` | Pydantic JSON Schema → ToolDefinition |
+| Anthropic 适配器工具格式转换 | `services/ai/anthropic.py` | ToolDefinition → `anthropic.types.ToolParam` |
+| OpenAI 适配器工具格式转换 | `services/ai/openai.py` | ToolDefinition → `openai.types.ChatCompletionToolParam` |
+
 ### 任务列表
 
 #### 任务 2.1：Anthropic 适配器（Week 5）
@@ -470,7 +488,7 @@ Pode "Run the tests and tell me if they pass"
 
 ## Phase 3：完整工具集
 
-**目标**：实现所有 25+ 个工具，并升级 Agentic Loop 引擎（并发 ToolUseQueue、完整 System Prompt 组装）。  
+**目标**：实现所有 25+ 个工具，并升级 Agentic Loop 引擎（并发 ToolUseQueue、完整 System Prompt 组装）；同时实现 Plan Mode 骨架。  
 **时间**：Weeks 8-10（15 个工作日）  
 **依赖**：Phase 2 完成  
 **负责 Agent**：工具实现 Agent（可以多个 Agent 并行）
@@ -479,6 +497,26 @@ Pode "Run the tests and tell me if they pass"
 - `ToolUseQueue` 并发版本（`is_concurrency_safe` + `asyncio.gather` + sibling abort）
 - System Prompt 动态组装完整版（Plan Mode、Reminders 注入）
 - `app/compact.py`：Auto-compact 框架（触发逻辑，压缩策略在 Phase 6 完善）
+
+**Phase 3 工具系统子块**（对应 [tools-system.md](./tools-system.md)）：
+
+| 子功能 | 文件 | 说明 |
+|--------|------|------|
+| `ToolLoader`（内置工具加载） | `core/tools/loader.py` | 仅加载内置工具；MCP/插件在 Phase 5 |
+| `get_enabled_tools()`（完整过滤逻辑） | `core/tools/registry.py` | safe_mode + permission_mode + command_allowed_tools |
+| 工具 → ToolDefinition 转换 | `core/tools/base.py` | `tool_to_definition()` 供适配器使用 |
+| ToolUseQueue 并发版 | `app/query.py` | `is_concurrency_safe` + barrier + sibling abort |
+
+**Phase 3 Plan Mode 子块**（对应 [plan-mode.md](./plan-mode.md)）：
+
+| 子功能 | 文件 | 说明 |
+|--------|------|------|
+| `Plan` / `PlanStep` Pydantic 模型 | `app/plan.py` 或 `types/plan.py` | 数据结构定义 |
+| Plan JSONL 事件类型 | `types/session_events.py` | `plan_created`/`plan_approved` 等 |
+| `EnterPlanModeTool` | `tools/agent/plan_mode.py` | 切换 `PermissionMode.PLAN` + 进度提示 |
+| `ExitPlanModeTool` | `tools/agent/plan_mode.py` | 输出 Plan 对象 + 重置 permission_mode |
+| Plan Mode System Prompt Additions | `services/system/system_prompt.py` | `build_system_prompt()` 中注入 PLAN 模式提示 |
+| `load_plan_from_log()` | `app/session.py` | JSONL replay 恢复活跃计划 |
 
 ### 任务列表（按优先级）
 
@@ -508,9 +546,9 @@ Pode "Run the tests and tell me if they pass"
 |------|------|---------|
 | AskExpertModelTool | `tools/ai/ask_expert.py` | 调用另一个 AI 模型 |
 | SkillTool | `tools/ai/skill.py` | 执行已安装的 Skill |
-| EnterPlanModeTool | `tools/agent/plan_mode.py` | 进入计划模式 |
-| ExitPlanModeTool | `tools/agent/plan_mode.py` | 退出计划模式 |
-| TaskTool | `tools/agent/task.py` | 子任务管理 |
+| **EnterPlanModeTool** | `tools/agent/plan_mode.py` | **进入计划模式**（详见 plan-mode.md） |
+| **ExitPlanModeTool** | `tools/agent/plan_mode.py` | **退出计划模式，输出 Plan 对象** |
+| TaskTool | `tools/agent/task.py` | 子任务管理（完整版在 Phase 5） |
 | SlashCommandTool | `tools/interaction/slash_command.py` | 执行自定义命令 |
 
 #### Web 搜索提供商（Week 10）
@@ -534,16 +572,28 @@ Pode "Search the web for 'Python asyncio best practices' and summarize"
 
 Pode "Read my notebook.ipynb and explain what it does"
 # 期望：调用 NotebookReadTool，返回解释
+
+Pode "Help me refactor auth.py"
+# 期望：LLM 自动调用 EnterPlanModeTool，探索代码后输出 Plan；
+#       用户批准后进入执行阶段
 ```
 
 ---
 
 ## Phase 4：终端 UI
 
-**目标**：实现基于 Textual 的完整 REPL 界面。  
+**目标**：实现基于 Textual 的完整 REPL 界面，以及 Plan Mode 的审批 UI 和进度追踪。  
 **时间**：Weeks 11-13（15 个工作日）  
 **依赖**：Phase 2 完成（可与 Phase 3 并行）  
 **负责 Agent**：UI 开发 Agent
+
+**Phase 4 Plan Mode UI 子块**（对应 [plan-mode.md](./plan-mode.md)）：
+
+| 子功能 | 文件 | 说明 |
+|--------|------|------|
+| 计划审批 Widget | `ui/widgets/plan_approval.py` | 展示 Plan 对象；批准/拒绝按钮 |
+| 计划执行进度 Widget | `ui/widgets/plan_progress.py` | 展示步骤列表，已完成步骤标记 ✓ |
+| SessionEvent 处理（`plan_created`/`plan_step_done`） | `ui/screens/repl_screen.py` | 监听计划事件，更新 UI |
 
 ### 任务列表
 
@@ -647,6 +697,21 @@ Pode  # 不带参数，启动 REPL
 - Hook 系统完整实现（4 个注入点：`run_user_prompt_submit_hooks`、`run_pre_tool_use_hooks`、`run_post_tool_use_hooks`、`run_stop_hooks`）
 - Stop Hook 重入机制（`MAX_STOP_HOOK_ATTEMPTS = 5`）
 - `services/hooks/runner.py` 模块
+
+**Phase 5 工具系统子块**（对应 [tools-system.md](./tools-system.md)）：
+
+| 子功能 | 文件 | 说明 |
+|--------|------|------|
+| `ToolLoader` MCP 工具加载 | `core/tools/loader.py` | `_load_mcp_tools()`：包装为 Pode Tool |
+| `ToolLoader` 插件工具加载 | `core/tools/loader.py` | `_load_plugin_tools()`：扫描 entry_points |
+| `wrap_mcp_tool_as_pode_tool()` | `services/mcp/tools.py` | MCP 工具 → Tool ABC 包装 |
+| Hook 对工具输入的影响 | `services/hooks/runner.py` | Pre-Tool Hook 可 block/modify input |
+
+**Phase 5 Plan Mode 子块**（对应 [plan-mode.md](./plan-mode.md)）：
+
+| 子功能 | 说明 |
+|--------|------|
+| `TaskTool`（子任务 Agent） | 支持将计划步骤委托给独立子 Agent 执行 |
 
 ### 任务列表
 
