@@ -889,6 +889,9 @@ async def build_system_prompt(
 
 **模块**：`pode_agent.app.session`
 
+> 📖 **`SessionManager.process_input()` 所调用的核心 Agentic Loop 设计规格详见** [agent-loop.md](./agent-loop.md)。  
+> 本节仅描述 Session API 的类型契约；循环引擎的递归结构、`ToolUseQueue`、Hook 系统请参阅该文档。
+
 ```python
 # === 事件类型（Session → UI）===
 
@@ -951,19 +954,18 @@ class SessionManager:
         
         这是 Session 的核心方法，UI 层通过 async for 消费 SessionEvent。
         
-        流程：
-        1. 处理 @mention
-        2. 追加 UserMessage 到历史
-        3. yield SessionEvent(USER_MESSAGE)
-        4. 循环：
-           a. 构建 system prompt
-           b. 调用 query_llm()，yield ASSISTANT_DELTA 事件
-           c. 如有工具调用：
-              - 检查权限（可能 yield PERMISSION_REQUEST）
-              - 执行工具（yield TOOL_USE_START, TOOL_PROGRESS, TOOL_RESULT）
-           d. 保存消息到日志
-           e. 若无工具调用 → break
-        5. yield SessionEvent(DONE)
+        高层流程：
+        1. 处理 @mention，构建 UserMessage
+        2. yield SessionEvent(USER_MESSAGE)
+        3. 委托 app/query.py: query() → query_core()（递归 Agentic Loop）
+           - 自动上下文压缩（auto_compact）
+           - 动态构建 system prompt（含 Hook 注入）
+           - LLM 调用 → ToolUseQueue 并发工具调度 → 递归
+           - Stop Hook 重入（最多 MAX_STOP_HOOK_ATTEMPTS 次）
+        4. yield SessionEvent(DONE)
+        
+        ⚠️  核心循环不是简单的 while True，而是递归 AsyncGenerator。
+        完整设计规格（伪代码、Hook 注入点、并发策略）见 docs/agent-loop.md。
         """
 
     def resolve_permission(

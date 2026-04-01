@@ -814,6 +814,9 @@ def get_all_tools() -> list[Tool]:
 
 **职责**：单次对话的完整生命周期管理，包括消息历史、工具调用编排、日志持久化。
 
+> 📖 **`process_input()` 内部调用的核心 Agentic Loop（递归主循环、`ToolUseQueue`、Hook 系统、Auto-compact）详见** [agent-loop.md](./agent-loop.md)。  
+> `session.py` 负责会话状态和 JSONL 持久化；循环引擎本身位于 `app/query.py`。
+
 ```python
 class SessionManager:
     """管理一次完整的对话会话"""
@@ -842,19 +845,12 @@ class SessionManager:
         """
         处理用户输入的完整流程：
         1. 处理 @mention
-        2. 运行预处理钩子
-        3. 添加 UserMessage
-        4. 循环：LLM 查询 → 工具执行
-        5. 保存到日志
+        2. 委托给 app/query.py: query() → query_core()（递归 Agentic Loop）
+        3. 保存消息到 JSONL 日志
         
         通过 AsyncGenerator yield 各种 SessionEvent 给 UI。
+        核心循环的设计规格见 docs/agent-loop.md。
         """
-
-    async def _execute_tool_use(
-        self,
-        tool_use: ToolUseBlock,
-    ) -> ToolResult:
-        """执行单个工具调用（含权限检查）"""
 
     def abort(self) -> None:
         """中断当前进行中的操作"""
@@ -877,6 +873,77 @@ class SessionEvent(BaseModel):
         "done",
     ]
     data: Any = None
+```
+
+---
+
+### `app/query.py`
+
+**职责**：Agentic Loop 核心引擎 —— `query()`、`query_core()`、`ToolUseQueue`、`check_permissions_and_call_tool()`。
+
+> 📖 **本模块的完整设计规格（递归主循环、并发调度、Hook 注入、Auto-compact、Stop Hook 重入）详见** [agent-loop.md](./agent-loop.md)。
+
+```python
+# 核心入口（由 SessionManager.process_input 调用）
+async def query(
+    prompt: str,
+    messages: list[Message],
+    tools: list[Tool],
+    session: "SessionManager",
+    options: QueryOptions,
+) -> AsyncGenerator[SessionEvent, None]:
+    """Agentic Loop 外层入口，负责初始消息构建，内部委托 query_core()"""
+
+# 递归主循环
+async def query_core(
+    messages: list[Message],
+    system_prompt: str,
+    tools: list[Tool],
+    session: "SessionManager",
+    options: QueryOptions,
+    hook_state: HookState,
+    stop_hook_attempts: int = 0,
+) -> AsyncGenerator[SessionEvent, None]:
+    """
+    递归式 Agentic Loop：
+      auto_compact → build_system_prompt → query_llm
+      → (无 tool_use) run_stop_hooks → 终止或重入
+      → (有 tool_use) ToolUseQueue → 递归 query_core
+    """
+
+# 并发工具调度器
+class ToolUseQueue:
+    """按 is_concurrency_safe 分批调度工具调用"""
+    async def run(self) -> AsyncGenerator[SessionEvent, None]: ...
+
+# 单工具完整管线
+async def check_permissions_and_call_tool(
+    tool_use: ToolUseBlock,
+    tools: list[Tool],
+    session: "SessionManager",
+    options: QueryOptions,
+    abort_event: asyncio.Event,
+) -> AsyncGenerator[SessionEvent, None]:
+    """Pre-hook → Pydantic 验证 → 权限检查 → tool.call() → Post-hook"""
+```
+
+---
+
+### `app/compact.py`
+
+**职责**：自动上下文压缩（Auto-compact），在消息历史超过阈值时调用 LLM 生成摘要。
+
+> 📖 **触发条件、压缩策略和在循环中的位置详见** [agent-loop.md — Auto-compact](./agent-loop.md#auto-compact自动上下文压缩)。
+
+```python
+AUTO_COMPACT_THRESHOLD_MESSAGES = 50
+AUTO_COMPACT_THRESHOLD_TOKENS = 180_000
+
+async def auto_compact_if_needed(
+    messages: list[Message],
+    options: QueryOptions,
+) -> list[Message]:
+    """检查并按需压缩消息历史，返回（可能已压缩的）消息列表"""
 ```
 
 ---
