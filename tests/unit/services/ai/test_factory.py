@@ -337,9 +337,15 @@ class TestBuildProviderKwargs:
         kwargs = _build_provider_kwargs(ProviderType.OPENAI_COMPAT, config)
         assert kwargs == {"base_url": "https://llm.example.com/v1", "api_key": "sk-custom"}
 
-    def test_openai_compat_no_base_url_skipped(self) -> None:
+    def test_openai_compat_no_base_url_skipped(self, monkeypatch: pytest.MonkeyPatch) -> None:
         from pode_agent.core.config.schema import ModelProfile
         from pode_agent.services.ai.factory import _build_provider_kwargs
+
+        # Clear env vars that may be set by integration test conftest
+        monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
+        monkeypatch.delenv("DASHSCOPE_BASE_URL", raising=False)
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+        monkeypatch.delenv("DASHSCOPE_API_KEY", raising=False)
 
         profile = ModelProfile(
             name="no-url",

@@ -132,23 +132,27 @@ class TestFindTool:
 
 
 class TestBuildToolDefinitions:
-    def test_builds_from_enabled_tools(self) -> None:
+    async def test_builds_from_enabled_tools(self) -> None:
         tool = MagicMock()
         tool.name = "bash"
         tool.description = "Run commands"
-        tool.input_schema.return_value = {"type": "object"}
-        tool.is_enabled.return_value = True
+        # input_schema() returns a Pydantic model class
+        from pydantic import BaseModel
+        class FakeInput(BaseModel):
+            pass
+        tool.input_schema.return_value = FakeInput
+        tool.is_enabled = AsyncMock(return_value=True)
 
-        defs = _build_tool_definitions([tool])
+        defs = await _build_tool_definitions([tool])
         assert len(defs) == 1
         assert defs[0].name == "bash"
 
-    def test_skips_disabled_tools(self) -> None:
+    async def test_skips_disabled_tools(self) -> None:
         tool = MagicMock()
         tool.name = "bash"
-        tool.is_enabled.return_value = False
+        tool.is_enabled = AsyncMock(return_value=False)
 
-        defs = _build_tool_definitions([tool])
+        defs = await _build_tool_definitions([tool])
         assert len(defs) == 0
 
 
@@ -167,11 +171,27 @@ class TestMessagesToDicts:
         msgs = [{"type": "assistant", "message": [{"type": "text", "text": "hi"}]}]
         result = _messages_to_dicts(msgs)
         assert result[0]["role"] == "assistant"
+        assert result[0]["content"] == [{"type": "text", "text": "hi"}]
 
-    def test_skips_tool_result_messages(self) -> None:
-        msgs = [{"type": "user", "message": "result", "tool_use_result": "data"}]
+    def test_tool_result_content_preserved_as_list(self) -> None:
+        """Tool result messages with list content should pass through as-is."""
+        tool_result_content = [
+            {"type": "tool_result", "tool_use_id": "tu_001", "content": "3 files found"},
+        ]
+        msgs = [{"role": "user", "content": tool_result_content}]
         result = _messages_to_dicts(msgs)
-        assert len(result) == 0
+        assert len(result) == 1
+        assert result[0]["content"] == tool_result_content
+
+    def test_string_content_user_message(self) -> None:
+        msgs = [{"type": "user", "message": "plain text"}]
+        result = _messages_to_dicts(msgs)
+        assert result == [{"role": "user", "content": "plain text"}]
+
+    def test_non_string_non_list_content_coerced(self) -> None:
+        msgs = [{"type": "user", "message": 42}]
+        result = _messages_to_dicts(msgs)
+        assert result == [{"role": "user", "content": "42"}]
 
 
 # ---------------------------------------------------------------------------
@@ -270,15 +290,20 @@ class TestQueryCore:
 
     async def test_tool_use_executes_and_recurses(self) -> None:
         """Test the full tool_use -> execute -> recurse cycle."""
-        # Mock tool
+        # Mock tool with real Pydantic input_schema
+        from pydantic import BaseModel
+
+        class GlobInput(BaseModel):
+            pattern: str = "*.py"
+
         mock_tool = MagicMock()
         mock_tool.name = "glob"
         mock_tool.description = "Find files"
-        mock_tool.input_schema.return_value = {"type": "object", "properties": {}}
-        mock_tool.is_enabled.return_value = True
+        mock_tool.input_schema.return_value = GlobInput
+        mock_tool.is_enabled = AsyncMock(return_value=True)
         mock_tool.is_read_only.return_value = True
         mock_tool.needs_permissions.return_value = False
-        mock_tool.validate_input = MagicMock()
+        mock_tool.validate_input = AsyncMock()
 
         # Mock tool output
         mock_tool_output = MagicMock()

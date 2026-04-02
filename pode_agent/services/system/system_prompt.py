@@ -1,12 +1,24 @@
 """System prompt assembly for the Agentic Loop.
 
-Phase 2: minimal system prompt with base personality + CWD info.
-Dynamic context, plan mode, and reminders are deferred to later phases.
+Dynamically composes the full system prompt from multiple sections:
+1. Base personality prompt
+2. CWD (current working directory)
+3. Plan mode instructions (when active)
+4. Tool reminders (available tools summary)
+5. Active plan context (when executing a plan)
+6. Todo list (when todos exist)
 
 Reference: docs/agent-loop.md — System Prompt
 """
 
 from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from pode_agent.core.permissions.types import PermissionMode
+    from pode_agent.core.tools.base import Tool
+    from pode_agent.types.plan import Plan
 
 BASE_SYSTEM_PROMPT = """\
 You are Pode, an AI-powered terminal coding assistant.
@@ -27,13 +39,116 @@ CWD_TEMPLATE = """
 Current working directory: {cwd}
 """
 
+PLAN_MODE_SYSTEM_PROMPT = """
 
-def build_system_prompt(base: str, cwd: str) -> str:
-    """Assemble the full system prompt.
+<plan_mode>
+You are now in **plan mode**. In this mode:
+1. You MUST only use read-only tools (file_read, glob, grep, ls, bash for safe commands).
+2. Do NOT modify any files or execute side-effect commands.
+3. Explore the codebase thoroughly to understand the current state.
+4. When ready, call the `exit_plan_mode` tool with a complete Plan object.
+5. The plan MUST include: objective, steps (with suggested tools), acceptance criteria, and risks.
+</plan_mode>
+"""
 
-    Phase 2: base prompt + CWD info only.
+TOOL_REMINDERS_TEMPLATE = """
+
+<available_tools>
+You have access to the following tools:
+{tool_list}
+</available_tools>
+"""
+
+ACTIVE_PLAN_TEMPLATE = """
+
+<active_plan>
+You are executing the following plan:
+Objective: {objective}
+Status: {status}
+
+Steps:
+{steps}
+</active_plan>
+"""
+
+TODO_CONTEXT_TEMPLATE = """
+
+<todos>
+Current task list:
+{todo_list}
+</todos>
+"""
+
+
+def build_system_prompt(
+    base: str,
+    cwd: str,
+    *,
+    permission_mode: PermissionMode | None = None,
+    tools: list[Tool] | None = None,
+    plan: Plan | None = None,
+    todos: list[dict[str, Any]] | None = None,
+) -> str:
+    """Assemble the full system prompt from multiple sections.
+
+    Args:
+        base: Base personality prompt text.
+        cwd: Current working directory.
+        permission_mode: Current permission mode (adds plan mode instructions).
+        tools: Available tools (adds tool reminders).
+        plan: Active plan (adds plan execution context).
+        todos: Current todo items (adds todo context).
+
+    Returns:
+        Fully assembled system prompt string.
     """
     parts = [base]
+
+    # 1. CWD
     if cwd:
         parts.append(CWD_TEMPLATE.format(cwd=cwd))
+
+    # 2. Plan mode instructions
+    if permission_mode is not None:
+        from pode_agent.core.permissions.types import PermissionMode
+
+        if permission_mode == PermissionMode.PLAN:
+            parts.append(PLAN_MODE_SYSTEM_PROMPT)
+
+    # 3. Tool reminders
+    if tools:
+        tool_lines = []
+        for t in tools:
+            desc = (t.description or "")[:80]
+            tool_lines.append(f"- {t.name}: {desc}")
+        parts.append(TOOL_REMINDERS_TEMPLATE.format(tool_list="\n".join(tool_lines)))
+
+    # 4. Active plan context
+    if plan is not None:
+        step_lines = []
+        for step in plan.steps:
+            marker = {
+                "pending": "[ ]",
+                "running": "[>]",
+                "done": "[x]",
+                "skipped": "[-]",
+                "failed": "[!]",
+            }.get(step.status, "[ ]")
+            step_lines.append(f"  {marker} Step {step.index}: {step.title}")
+        parts.append(ACTIVE_PLAN_TEMPLATE.format(
+            objective=plan.objective,
+            status=plan.status,
+            steps="\n".join(step_lines),
+        ))
+
+    # 5. Todo list
+    if todos:
+        todo_lines = []
+        markers = {"pending": "○", "in_progress": "◐", "completed": "●"}
+        for todo in todos:
+            marker = markers.get(todo.get("status", "pending"), "○")
+            content = todo.get("content", "")
+            todo_lines.append(f"  {marker} {content}")
+        parts.append(TODO_CONTEXT_TEMPLATE.format(todo_list="\n".join(todo_lines)))
+
     return "".join(parts)

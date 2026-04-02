@@ -9,6 +9,7 @@ Reference: docs/api-specs.md — AI Provider API
 
 from __future__ import annotations
 
+import os
 from collections.abc import AsyncGenerator
 from typing import Any
 
@@ -110,11 +111,30 @@ _PROVIDER_CLASSES: dict[ProviderType, tuple[str, str]] = {
 
 # Model prefix → provider type routing
 _PREFIX_ROUTING: list[tuple[str, ProviderType]] = [
+    # Anthropic Claude
     ("claude-", ProviderType.ANTHROPIC),
+    # OpenAI
     ("gpt-", ProviderType.OPENAI),
     ("o1-", ProviderType.OPENAI),
     ("o3-", ProviderType.OPENAI),
     ("chatgpt-", ProviderType.OPENAI),
+    # Alibaba Cloud DashScope (qwen)
+    ("qwen-", ProviderType.OPENAI_COMPAT),
+    ("qwen3", ProviderType.OPENAI_COMPAT),
+    ("qwq-", ProviderType.OPENAI_COMPAT),
+    # DeepSeek
+    ("deepseek-", ProviderType.OPENAI_COMPAT),
+    # Zhipu GLM
+    ("glm-", ProviderType.OPENAI_COMPAT),
+    # Moonshot
+    ("moonshot-", ProviderType.OPENAI_COMPAT),
+    # Ollama local
+    ("llama", ProviderType.OPENAI_COMPAT),
+    ("mistral", ProviderType.OPENAI_COMPAT),
+    ("codestral", ProviderType.OPENAI_COMPAT),
+    # Groq
+    ("mixtral-", ProviderType.OPENAI_COMPAT),
+    ("llama-", ProviderType.OPENAI_COMPAT),
 ]
 
 
@@ -235,21 +255,34 @@ def _build_provider_kwargs(
 ) -> dict[str, Any]:
     """Build kwargs dict for provider constructor from config."""
     kwargs: dict[str, Any] = {}
-    if not config:
-        return kwargs
 
-    # Proxy applies to all providers
-    if config.proxy:
-        kwargs["proxy"] = config.proxy
+    # For OPENAI_COMPAT providers, auto-detect base_url and api_key from env
+    if provider_type == ProviderType.OPENAI_COMPAT:
+        base_url = os.environ.get("OPENAI_BASE_URL", "") or os.environ.get(
+            "DASHSCOPE_BASE_URL", ""
+        )
+        api_key = os.environ.get("OPENAI_API_KEY", "") or os.environ.get(
+            "DASHSCOPE_API_KEY", ""
+        )
+        if base_url:
+            kwargs["base_url"] = base_url
+        if api_key:
+            kwargs["api_key"] = api_key
 
-    # For openai-compat, check model profiles for base_url
-    if provider_type == ProviderType.OPENAI_COMPAT and config.model_profiles:
-        for profile in config.model_profiles:
-            if profile.base_url:
-                kwargs["base_url"] = profile.base_url
-                if profile.api_key:
-                    kwargs["api_key"] = profile.api_key
-                break
+    # Config overrides and extensions
+    if config:
+        # Proxy applies to all providers
+        if config.proxy:
+            kwargs["proxy"] = config.proxy
+
+        # For openai-compat, check model profiles for base_url
+        if provider_type == ProviderType.OPENAI_COMPAT and config.model_profiles:
+            for profile in config.model_profiles:
+                if profile.base_url:
+                    kwargs["base_url"] = profile.base_url
+                    if profile.api_key:
+                        kwargs["api_key"] = profile.api_key
+                    break
 
     return kwargs
 

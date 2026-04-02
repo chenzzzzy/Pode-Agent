@@ -9,6 +9,7 @@ Reference: docs/modules.md — Print Mode
 from __future__ import annotations
 
 import sys
+from pathlib import Path
 
 from pydantic import BaseModel
 
@@ -54,6 +55,7 @@ async def run_print_mode(
         permission_mode=options.permission_mode,
         verbose=options.verbose,
         safe_mode=options.safe_mode,
+        cwd=str(Path.cwd()),
     )
 
     text_parts: list[str] = []

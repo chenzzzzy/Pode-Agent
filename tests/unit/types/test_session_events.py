@@ -26,6 +26,9 @@ class TestSessionEventType:
             "user_message", "assistant_delta", "tool_use_start",
             "tool_progress", "tool_result", "permission_request",
             "cost_update", "model_error", "done",
+            # Plan mode events (Phase 3)
+            "plan_created", "plan_approved", "plan_step_start",
+            "plan_step_done", "plan_done", "plan_cancelled",
         }
         actual = {e.value for e in SessionEventType}
         assert actual == expected

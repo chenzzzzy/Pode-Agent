@@ -27,6 +27,13 @@ class SessionEventType(StrEnum):
     COST_UPDATE = "cost_update"
     MODEL_ERROR = "model_error"
     DONE = "done"
+    # Plan mode events
+    PLAN_CREATED = "plan_created"
+    PLAN_APPROVED = "plan_approved"
+    PLAN_STEP_START = "plan_step_start"
+    PLAN_STEP_DONE = "plan_step_done"
+    PLAN_DONE = "plan_done"
+    PLAN_CANCELLED = "plan_cancelled"
 
 
 class SessionEvent(BaseModel):
@@ -48,3 +55,52 @@ class PermissionRequestData(BaseModel):
     tool_input: dict[str, Any]
     risk_level: Literal["low", "medium", "high"] = "medium"
     description: str | None = None
+
+
+# --- Plan mode event data models ---
+
+
+class PlanCreatedData(BaseModel):
+    """Data payload for a ``PLAN_CREATED`` event."""
+
+    plan_id: str
+    slug: str | None = None
+    objective: str
+    steps_count: int
+    acceptance_criteria: list[str] = []
+    risks: list[str] = []
+
+
+class PlanApprovedData(BaseModel):
+    """Data payload for a ``PLAN_APPROVED`` event."""
+
+    plan_id: str
+
+
+class PlanStepStartData(BaseModel):
+    """Data payload for a ``PLAN_STEP_START`` event."""
+
+    plan_id: str
+    step_index: int
+    step_title: str
+
+
+class PlanStepDoneData(BaseModel):
+    """Data payload for a ``PLAN_STEP_DONE`` event."""
+
+    plan_id: str
+    step_index: int
+    result_summary: str | None = None
+
+
+class PlanDoneData(BaseModel):
+    """Data payload for a ``PLAN_DONE`` event."""
+
+    plan_id: str
+
+
+class PlanCancelledData(BaseModel):
+    """Data payload for a ``PLAN_CANCELLED`` event."""
+
+    plan_id: str
+    reason: str | None = None

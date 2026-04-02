@@ -2,15 +2,15 @@
 
 This module implements the core agent loop:
 1. ``query()`` — outer entry point, builds UserMessage, delegates to query_core
-2. ``query_core()`` — recursive main loop: LLM call → tool use → recurse
-3. ``ToolUseQueue`` — serial tool execution (Phase 2: no concurrency)
+2. ``query_core()`` — recursive main loop: auto-compact → system prompt → LLM → tools → recurse
+3. ``ToolUseQueue`` — concurrency-aware tool execution (from tool_queue.py)
 4. ``check_permissions_and_call_tool()`` — permission check + execute pipeline
 
-Phase 2 simplifications:
-- No pre/post hooks (deferred to Phase 5)
-- No auto-compact (deferred to Phase 5)
-- Serial-only ToolUseQueue (defer concurrency to Phase 5)
-- No stop hooks (just save message and yield DONE)
+Phase 3 additions:
+- Concurrent ToolUseQueue (safe tools parallel, unsafe tools serial)
+- Dynamic system prompt assembly (plan mode, tool reminders)
+- Auto-compact framework (threshold-based truncation)
+- Plan mode result detection (enter_plan_mode / exit_plan_mode)
 
 Reference: docs/agent-loop.md — Full specification
 """
@@ -25,6 +25,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
+# Phase 3: auto-compact and concurrent tool queue
+from pode_agent.app.tool_queue import ToolUseQueue
 from pode_agent.core.cost_tracker import add_to_total_cost, calculate_model_cost
 from pode_agent.core.permissions.engine import PermissionEngine
 from pode_agent.core.permissions.types import (
@@ -165,14 +167,16 @@ async def query_core(
         yield SessionEvent(type=SessionEventType.DONE, data={"reason": "aborted"})
         return
 
-    # 1. Build system prompt with CWD
+    # 1. Build system prompt with dynamic assembly (Phase 3)
     full_system_prompt = build_system_prompt(
         system_prompt or BASE_SYSTEM_PROMPT,
         options.cwd,
+        permission_mode=options.permission_mode,
+        tools=tools,
     )
 
     # 2. Build tool definitions
-    tool_defs = _build_tool_definitions(tools)
+    tool_defs = await _build_tool_definitions(tools)
 
     # 3. Build request params
     params = UnifiedRequestParams(
@@ -188,9 +192,9 @@ async def query_core(
     # 4. Call LLM and stream responses
     assistant_text_parts: list[str] = []
     tool_use_blocks: list[ToolUseBlock] = []
-    current_tool_id: str | None = None
-    current_tool_name: str | None = None
-    current_tool_json: str = ""
+    # Track pending tool uses by ID to support multiple concurrent tool_uses
+    pending_tools: dict[str, tuple[str, str]] = {}  # tool_use_id → (name, json_str)
+    current_tool_id: str | None = None  # fallback for deltas without tool_use_id
     token_input = 0
     token_output = 0
 
@@ -205,28 +209,29 @@ async def query_core(
             )
 
         elif resp.type == "tool_use_start":
-            current_tool_id = resp.tool_use_id
-            current_tool_name = resp.tool_name
-            current_tool_json = ""
+            if resp.tool_use_id and resp.tool_name:
+                pending_tools[resp.tool_use_id] = (resp.tool_name, "")
+                current_tool_id = resp.tool_use_id
 
         elif resp.type == "tool_use_delta":
-            if resp.text:
-                current_tool_json += resp.text
+            tu_id = resp.tool_use_id or current_tool_id
+            if resp.text and tu_id and tu_id in pending_tools:
+                name, json_str = pending_tools[tu_id]
+                pending_tools[tu_id] = (name, json_str + resp.text)
 
         elif resp.type == "message_done":
-            # Finalize any pending tool use
-            if current_tool_id and current_tool_name:
+            # Finalize all pending tool uses
+            for tu_id, (tu_name, tu_json) in pending_tools.items():
                 try:
-                    tool_input = json.loads(current_tool_json) if current_tool_json else {}
+                    tool_input = json.loads(tu_json) if tu_json else {}
                 except json.JSONDecodeError:
-                    tool_input = {"raw": current_tool_json}
+                    tool_input = {"raw": tu_json}
                 tool_use_blocks.append(ToolUseBlock(
-                    id=current_tool_id,
-                    name=current_tool_name,
+                    id=tu_id,
+                    name=tu_name,
                     input=tool_input,
                 ))
-                current_tool_id = None
-                current_tool_name = None
+            pending_tools.clear()
 
             # Capture usage
             if resp.usage:
@@ -285,11 +290,17 @@ async def query_core(
         )
         return
 
-    # 7. Execute tools via ToolUseQueue
+    # 7. Execute tools via concurrent ToolUseQueue (Phase 3)
     tool_results: dict[str, str] = {}
-    async for event in _run_tool_queue(
-        tool_use_blocks, tools, session, options,
-    ):
+    queue = ToolUseQueue(
+        tool_uses=tool_use_blocks,
+        tools=tools,
+        execute_single=lambda tu: _check_permissions_and_call_tool(
+            tu, tools, session, options,
+        ),
+        abort_event=session.abort_event,
+    )
+    async for event in queue.run():
         yield event
         # Collect tool results
         if event.type == SessionEventType.TOOL_RESULT and event.data:
@@ -413,7 +424,7 @@ async def _check_permissions_and_call_tool(
 
     # 3. Execute tool
     try:
-        tool_input_model = _build_tool_input(tool, tool_use.input)
+        tool_input_model = await _build_tool_input(tool, tool_use.input)
         tool_context = _build_tool_context(session, options, tool_use.id)
 
         result = await collect_tool_result(
@@ -461,15 +472,15 @@ def _find_tool(name: str, tools: list[Tool]) -> Tool | None:
     return None
 
 
-def _build_tool_definitions(tools: list[Tool]) -> list[ToolDefinition]:
+async def _build_tool_definitions(tools: list[Tool]) -> list[ToolDefinition]:
     """Build ToolDefinition list from Tool instances."""
     defs: list[ToolDefinition] = []
     for t in tools:
-        if t.is_enabled():
+        if await t.is_enabled():
             defs.append(ToolDefinition(
                 name=t.name,
                 description=t.description or "",
-                input_schema=t.input_schema(),
+                input_schema=t.input_schema().model_json_schema(),
             ))
     return defs
 
@@ -478,27 +489,28 @@ def _messages_to_dicts(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Convert message list to plain dicts suitable for the LLM.
 
     Handles both raw dicts and Pydantic model instances.
+    Preserves structured content (lists) for tool_result blocks.
     """
     result: list[dict[str, Any]] = []
     for msg in messages:
         if isinstance(msg, dict):
             role = msg.get("type", msg.get("role", "user"))
             content = msg.get("message", msg.get("content", ""))
-            # Skip tool result messages (they have a different structure)
-            if msg.get("tool_use_result") is not None:
-                continue
-            if role == "user":
-                result.append({"role": "user", "content": str(content)})
-            elif role == "assistant":
-                result.append({"role": "assistant", "content": content})
+            if isinstance(content, list):
+                # Structured content (tool_result blocks, assistant content) — pass through
+                result.append({"role": role, "content": content})
+            elif isinstance(content, str):
+                result.append({"role": role, "content": content})
+            else:
+                result.append({"role": role, "content": str(content) if content else ""})
         elif hasattr(msg, "model_dump"):
             data = msg.model_dump()
             role = data.get("type", "user")
             content = data.get("message", data.get("content", ""))
-            if role == "user":
-                result.append({"role": "user", "content": str(content)})
-            elif role == "assistant":
-                result.append({"role": "assistant", "content": content})
+            if isinstance(content, list | str):
+                result.append({"role": role, "content": content})
+            else:
+                result.append({"role": role, "content": str(content) if content else ""})
     return result
 
 
@@ -524,23 +536,15 @@ def _check_permissions(
     )
 
 
-def _build_tool_input(
+async def _build_tool_input(
     tool: Tool,
     raw_input: dict[str, Any],
 ) -> BaseModel:
     """Parse and validate tool input using the tool's input schema."""
-    # Phase 2: validate_input is synchronous
-    tool.validate_input(raw_input)
-    return _create_input_model(raw_input)
-
-
-def _create_input_model(data: dict[str, Any]) -> BaseModel:
-    """Create a simple Pydantic model wrapping tool input data."""
-
-    class ToolInput(BaseModel):
-        model_config = ConfigDict(extra="allow")
-
-    return ToolInput(**data)
+    input_cls = tool.input_schema()
+    input_model = input_cls(**raw_input)
+    await tool.validate_input(input_model)
+    return input_model
 
 
 def _build_tool_context(
