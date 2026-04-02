@@ -276,18 +276,6 @@ export function useSession(peer: JsonRpcPeer) {
         return prev
       })
     })
-      // We emit a progress update message for rendering
-      setMessages((prev) => {
-        // Replace last task_progress if it's for the same plan
-        const lastIdx = prev.findLastIndex((m) => m.role === "assistant" && m.type === "task_progress")
-        if (lastIdx >= 0) {
-          const updated = [...prev]
-          updated[lastIdx] = progressMsg
-          return updated
-        }
-        return [...prev, progressMsg]
-      })
-    })
 
     peer.registerMethod("plan/step_done", (params: unknown) => {
       const p = params as { plan_id: string; step_index: number; result_summary?: string }

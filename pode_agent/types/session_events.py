@@ -53,6 +53,7 @@ class PermissionRequestData(BaseModel):
 
     tool_name: str
     tool_input: dict[str, Any]
+    tool_use_id: str = ""
     risk_level: Literal["low", "medium", "high"] = "medium"
     description: str | None = None
 

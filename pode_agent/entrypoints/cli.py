@@ -20,6 +20,7 @@ from pode_agent.core.config import (
     list_config_for_cli,
     set_config_for_cli,
 )
+from pode_agent.core.config.schema import DEFAULT_MODEL_NAME
 
 app = typer.Typer(
     name="pode",
@@ -51,7 +52,7 @@ def main(
         is_eager=True,
     ),
     model: str = typer.Option(
-        "claude-sonnet-4-5-20251101",
+        DEFAULT_MODEL_NAME,
         "--model",
         "-m",
         help="Model to use for print mode.",
@@ -84,10 +85,13 @@ def main(
     if prompt:
         # Print mode: run single query
         from pode_agent.app.print_mode import PrintModeOptions, run_print_mode
+        from pode_agent.core.tools.loader import ToolLoader
         from pode_agent.core.tools.registry import ToolRegistry
 
         # Collect available tools
         registry = ToolRegistry()
+        loader = ToolLoader(registry)
+        loader._load_builtin_tools()
         tools = registry.tools
 
         opts = PrintModeOptions(
@@ -108,7 +112,7 @@ def main(
 # --- REPL launcher ---
 
 
-async def _launch_repl(*, model: str = "claude-sonnet-4-5-20251101", safe_mode: bool = False) -> int:
+async def _launch_repl(*, model: str = DEFAULT_MODEL_NAME, safe_mode: bool = False) -> int:
     """Launch the interactive REPL: Bun Ink UI + Python JSON-RPC bridge.
 
     Architecture::

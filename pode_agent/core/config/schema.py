@@ -14,6 +14,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+DEFAULT_MODEL_NAME = "claude-sonnet-4-5-20251101"
+
 
 class ProviderType(StrEnum):
     """Supported LLM provider types."""
@@ -98,7 +100,7 @@ class GlobalConfig(BaseModel):
     has_completed_onboarding: bool = False
     last_onboarding_version: str | None = None
     last_release_notes_seen: str | None = None
-    default_model_name: str = "claude-sonnet-4-5-20251101"
+    default_model_name: str = DEFAULT_MODEL_NAME
     max_tokens: int | None = None
     auto_compact_threshold: int = 50
     primary_provider: ProviderType | None = None

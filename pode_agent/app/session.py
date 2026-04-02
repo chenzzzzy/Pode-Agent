@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from pode_agent.app.query import QueryOptions, query
+from pode_agent.core.config.schema import DEFAULT_MODEL_NAME
 from pode_agent.core.cost_tracker import get_total_cost
 from pode_agent.core.permissions.types import (
     PermissionContext,
@@ -53,7 +54,7 @@ class SessionManager:
         message_log_name: str | None = None,
         fork_number: int = 0,
         permission_context: PermissionContext | None = None,
-        model: str = "claude-sonnet-4-5-20251101",
+        model: str = DEFAULT_MODEL_NAME,
         system_prompt: str = BASE_SYSTEM_PROMPT,
     ) -> None:
         self._messages: list[dict[str, Any]] = list(initial_messages or [])

@@ -17,6 +17,7 @@ Reference: docs/agent-loop.md — Full specification
 
 from __future__ import annotations
 
+import asyncio
 import json
 import time
 import uuid
@@ -26,11 +27,14 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict
 
 # Phase 3: auto-compact and concurrent tool queue
+from pode_agent.app.compact import auto_compact_if_needed
 from pode_agent.app.tool_queue import ToolUseQueue
-from pode_agent.core.cost_tracker import add_to_total_cost, calculate_model_cost
+from pode_agent.core.config.schema import DEFAULT_MODEL_NAME
+from pode_agent.core.cost_tracker import add_to_total_cost, calculate_model_cost, get_total_cost
 from pode_agent.core.permissions.engine import PermissionEngine
 from pode_agent.core.permissions.types import (
     PermissionContext,
+    PermissionDecision,
     PermissionMode,
     PermissionResult,
 )
@@ -69,7 +73,7 @@ class QueryOptions(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     cwd: str = ""
-    model: str = "claude-sonnet-4-5-20251101"
+    model: str = DEFAULT_MODEL_NAME
     max_tokens: int = 8192
     temperature: float | None = None
     thinking_tokens: int | None = None
@@ -166,6 +170,9 @@ async def query_core(
     if session.abort_event.is_set():
         yield SessionEvent(type=SessionEventType.DONE, data={"reason": "aborted"})
         return
+
+    # Step 1a: auto-compact if needed
+    messages = auto_compact_if_needed(messages)
 
     # 1. Build system prompt with dynamic assembly (Phase 3)
     full_system_prompt = build_system_prompt(
@@ -278,7 +285,7 @@ async def query_core(
         add_to_total_cost(cost_usd)
         yield SessionEvent(
             type=SessionEventType.COST_UPDATE,
-            data={"cost_usd": cost_usd, "total_usd": 0.0},
+            data={"cost_usd": cost_usd, "total_usd": get_total_cost()},
         )
 
     # 6. No tool uses → save message, yield DONE
@@ -395,21 +402,25 @@ async def _check_permissions_and_call_tool(
             data=PermissionRequestData(
                 tool_name=tool_use.name,
                 tool_input=tool_use.input,
+                tool_use_id=tool_use.id,
                 risk_level="medium",
                 description=f"Tool '{tool_use.name}' requires permission",
             ).model_dump(),
         )
-        # Phase 2: no interactive permission resolution — deny by default
-        yield SessionEvent(
-            type=SessionEventType.TOOL_RESULT,
-            data={
-                "tool_use_id": tool_use.id,
-                "tool_name": tool_use.name,
-                "result": "Permission denied (no interactive resolution in Phase 2)",
-                "is_error": True,
-            },
-        )
-        return
+        # Wait for user's permission decision
+        decision = await _wait_for_permission_decision(session, tool_use.name)
+        if decision == PermissionDecision.DENY:
+            yield SessionEvent(
+                type=SessionEventType.TOOL_RESULT,
+                data={
+                    "tool_use_id": tool_use.id,
+                    "tool_name": tool_use.name,
+                    "result": "Permission denied",
+                    "is_error": True,
+                },
+            )
+            return
+        _apply_permission_decision(session, tool_use.name, decision)
     elif permission_result == PermissionResult.DENIED:
         yield SessionEvent(
             type=SessionEventType.TOOL_RESULT,
@@ -427,12 +438,19 @@ async def _check_permissions_and_call_tool(
         tool_input_model = await _build_tool_input(tool, tool_use.input)
         tool_context = _build_tool_context(session, options, tool_use.id)
 
+        # Queue for progress events from callback
+        progress_queue: asyncio.Queue[SessionEvent] = asyncio.Queue()
+
         result = await collect_tool_result(
             tool, tool_input_model, tool_context,
             on_progress=lambda p: _on_tool_progress(
-                p, tool_use.id, tool_use.name,
+                p, tool_use.id, tool_use.name, progress_queue,
             ),
         )
+
+        # Yield any progress events that accumulated during execution
+        while not progress_queue.empty():
+            yield await progress_queue.get()
 
         result_text = result.result_for_assistant or str(result.data or "")
 
@@ -573,6 +591,44 @@ async def _on_tool_progress(
     progress: Any,
     tool_use_id: str,
     tool_name: str,
+    queue: asyncio.Queue[SessionEvent],
 ) -> None:
-    """Handle tool progress updates. Phase 2: no-op."""
-    pass
+    """Enqueue TOOL_PROGRESS event from tool callback."""
+    await queue.put(SessionEvent(
+        type=SessionEventType.TOOL_PROGRESS,
+        data={
+            "tool_use_id": tool_use_id,
+            "content": progress.content if hasattr(progress, "content") else str(progress),
+        },
+    ))
+
+
+async def _wait_for_permission_decision(
+    session: Any,
+    tool_name: str,
+) -> PermissionDecision:
+    """Await user permission response. Falls back to DENY on abort."""
+    session._permission_event.clear()
+    done, pending = await asyncio.wait(
+        [
+            asyncio.create_task(session._permission_event.wait()),
+            asyncio.create_task(session.abort_event.wait()),
+        ],
+        return_when=asyncio.FIRST_COMPLETED,
+    )
+    for task in pending:
+        task.cancel()
+    if session.abort_event.is_set():
+        return PermissionDecision.DENY
+    return session._last_permission_decision or PermissionDecision.DENY
+
+
+def _apply_permission_decision(
+    session: Any,
+    tool_name: str,
+    decision: PermissionDecision,
+) -> None:
+    """Update session permission context with user's decision."""
+    tpc = session.permission_context.tool_permission_context
+    if decision in (PermissionDecision.ALLOW_SESSION, PermissionDecision.ALLOW_ALWAYS):
+        tpc.approved_tools = tpc.approved_tools | {tool_name}

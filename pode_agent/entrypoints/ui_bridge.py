@@ -357,14 +357,20 @@ class UIBridge:
     def _ensure_session(self) -> SessionManager:
         """Lazy-initialize SessionManager on first use."""
         if self._session is None:
+            from pode_agent.core.tools.loader import ToolLoader
             from pode_agent.core.tools.registry import ToolRegistry
 
             registry = ToolRegistry()
+            loader = ToolLoader(registry)
+            loader._load_builtin_tools()
             tools = registry.tools
 
+            from pode_agent.core.config.loader import get_global_config
+
+            config = get_global_config()
             self._session = SessionManager(
                 tools=tools,
-                model="claude-sonnet-4-5-20251101",
+                model=config.default_model_name,
             )
         return self._session
 

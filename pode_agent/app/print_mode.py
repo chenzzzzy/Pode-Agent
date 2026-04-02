@@ -15,6 +15,7 @@ from pydantic import BaseModel
 
 from pode_agent.app.query import QueryOptions
 from pode_agent.app.session import SessionManager
+from pode_agent.core.config.schema import DEFAULT_MODEL_NAME
 from pode_agent.core.permissions.types import PermissionMode
 from pode_agent.core.tools.base import Tool
 from pode_agent.types.session_events import SessionEventType
@@ -23,7 +24,7 @@ from pode_agent.types.session_events import SessionEventType
 class PrintModeOptions(BaseModel):
     """Options for print mode execution."""
 
-    model: str = "claude-sonnet-4-5-20251101"
+    model: str = DEFAULT_MODEL_NAME
     output_format: str = "text"  # "text" or "json"
     verbose: bool = False
     safe_mode: bool = False
