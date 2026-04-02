@@ -131,3 +131,221 @@ class TestQueryLlm:
             results = [r async for r in query_llm(params)]
             assert len(results) == 1
             assert results[0].text == "hi"
+
+    async def test_passes_config_to_get_provider(self) -> None:
+        from pode_agent.services.ai.base import AIResponse, UnifiedRequestParams
+        from pode_agent.services.ai.factory import query_llm
+
+        mock_provider = MagicMock(spec=AIProvider)
+
+        async def mock_query(params: Any) -> Any:
+            yield AIResponse(type="text_delta", text="ok")
+
+        mock_provider.query = mock_query
+        mock_config = MagicMock(spec=GlobalConfig)
+
+        with patch.object(
+            ModelAdapterFactory, "get_provider", return_value=mock_provider
+        ) as mock_get:
+            params = UnifiedRequestParams(
+                messages=[{"role": "user", "content": "hi"}],
+                system_prompt="test",
+                model="gpt-4o",
+            )
+            _ = [r async for r in query_llm(params, config=mock_config)]
+            mock_get.assert_called_once_with("gpt-4o", mock_config)
+
+
+# ---------------------------------------------------------------------------
+# get_provider with config (profile matching)
+# ---------------------------------------------------------------------------
+
+
+class TestGetProviderWithConfig:
+    @patch("pode_agent.services.ai.factory._load_provider_class")
+    def test_matches_profile_by_model_name(self, mock_load: MagicMock) -> None:
+        from pode_agent.core.config.schema import ModelProfile
+
+        mock_cls = MagicMock(spec=AIProvider)
+        mock_load.return_value = mock_cls
+
+        profile = ModelProfile(
+            name="my-claude",
+            provider=ProviderType.ANTHROPIC,
+            model_name="claude-sonnet-4-5-custom",
+            api_key="sk-test-123",
+            base_url="https://custom.api.com",
+        )
+        config = GlobalConfig(model_profiles=[profile])
+
+        provider = ModelAdapterFactory.get_provider("claude-sonnet-4-5-custom", config=config)
+        mock_load.assert_called_once()
+        mock_cls.assert_called_once_with(api_key="sk-test-123", base_url="https://custom.api.com")
+
+    @patch("pode_agent.services.ai.factory._load_provider_class")
+    def test_matches_profile_by_name(self, mock_load: MagicMock) -> None:
+        from pode_agent.core.config.schema import ModelProfile
+
+        mock_cls = MagicMock(spec=AIProvider)
+        mock_load.return_value = mock_cls
+
+        profile = ModelProfile(
+            name="claude-custom-alias",  # matches "claude-" prefix for routing
+            provider=ProviderType.ANTHROPIC,
+            model_name="claude-sonnet-custom",
+            api_key="key-456",
+        )
+        config = GlobalConfig(model_profiles=[profile])
+
+        # Match by profile.name field — passes _resolve_provider_type via "claude-" prefix
+        provider = ModelAdapterFactory.get_provider("claude-custom-alias", config=config)
+        mock_load.assert_called_once()
+
+    @patch("pode_agent.services.ai.factory._load_provider_class")
+    def test_no_profile_match_falls_through(self, mock_load: MagicMock) -> None:
+        mock_cls = MagicMock(spec=AIProvider)
+        mock_load.return_value = mock_cls
+
+        config = GlobalConfig(model_profiles=[])
+        provider = ModelAdapterFactory.get_provider("claude-sonnet-4-5", config=config)
+        # Falls through to default path
+        mock_load.assert_called_once()
+
+    def test_unregistered_provider_type_raises(self) -> None:
+        from pode_agent.core.config.schema import ModelProfile
+
+        # Register a prefix for a provider type that has no class registered
+        ModelAdapterFactory.register_provider("test-unregistered-", ProviderType.BEDROCK)
+        try:
+            with pytest.raises(ValueError, match="No provider registered for type"):
+                ModelAdapterFactory.get_provider("test-unregistered-model")
+        finally:
+            # Cleanup
+            _PREFIX_ROUTING.pop(0)
+
+
+# ---------------------------------------------------------------------------
+# _create_from_profile
+# ---------------------------------------------------------------------------
+
+
+class TestCreateFromProfile:
+    @patch("pode_agent.services.ai.factory._load_provider_class")
+    def test_creates_provider_from_profile(self, mock_load: MagicMock) -> None:
+        from pode_agent.core.config.schema import ModelProfile
+
+        mock_cls = MagicMock(spec=AIProvider)
+        mock_load.return_value = mock_cls
+
+        profile = ModelProfile(
+            name="test",
+            provider=ProviderType.ANTHROPIC,
+            model_name="claude-test",
+            api_key="sk-key",
+            base_url="https://api.example.com",
+        )
+        provider = ModelAdapterFactory._create_from_profile(profile)
+        mock_cls.assert_called_once_with(api_key="sk-key", base_url="https://api.example.com")
+
+    def test_unregistered_provider_type_raises(self) -> None:
+        from pode_agent.core.config.schema import ModelProfile
+
+        profile = ModelProfile(
+            name="test",
+            provider=ProviderType.GEMINI,  # Not in _PROVIDER_CLASSES
+            model_name="gemini-pro",
+        )
+        with pytest.raises(ValueError, match="No provider for type"):
+            ModelAdapterFactory._create_from_profile(profile)
+
+
+# ---------------------------------------------------------------------------
+# _load_provider_class
+# ---------------------------------------------------------------------------
+
+
+class TestLoadProviderClass:
+    def test_loads_anthropic_provider(self) -> None:
+        from pode_agent.services.ai.factory import _load_provider_class
+
+        cls = _load_provider_class(
+            "pode_agent.services.ai.anthropic", "AnthropicProvider"
+        )
+        from pode_agent.services.ai.anthropic import AnthropicProvider
+        assert cls is AnthropicProvider
+
+    def test_loads_openai_provider(self) -> None:
+        from pode_agent.services.ai.factory import _load_provider_class
+
+        cls = _load_provider_class(
+            "pode_agent.services.ai.openai", "OpenAIProvider"
+        )
+        from pode_agent.services.ai.openai import OpenAIProvider
+        assert cls is OpenAIProvider
+
+    def test_invalid_class_name_raises(self) -> None:
+        from pode_agent.services.ai.factory import _load_provider_class
+
+        with pytest.raises(AttributeError):
+            _load_provider_class("pode_agent.services.ai.anthropic", "NonexistentClass")
+
+    def test_non_provider_class_raises(self) -> None:
+        from pode_agent.services.ai.factory import _load_provider_class
+
+        with pytest.raises(ValueError, match="is not an AIProvider subclass"):
+            _load_provider_class("pode_agent.services.ai.base", "TokenUsage")
+
+
+# ---------------------------------------------------------------------------
+# _build_provider_kwargs
+# ---------------------------------------------------------------------------
+
+
+class TestBuildProviderKwargs:
+    def test_no_config_returns_empty(self) -> None:
+        from pode_agent.services.ai.factory import _build_provider_kwargs
+
+        kwargs = _build_provider_kwargs(ProviderType.ANTHROPIC, None)
+        assert kwargs == {}
+
+    def test_config_without_proxy_returns_empty(self) -> None:
+        from pode_agent.services.ai.factory import _build_provider_kwargs
+
+        config = GlobalConfig()
+        kwargs = _build_provider_kwargs(ProviderType.ANTHROPIC, config)
+        assert kwargs == {}
+
+    def test_proxy_injected(self) -> None:
+        from pode_agent.services.ai.factory import _build_provider_kwargs
+
+        config = GlobalConfig(proxy="http://proxy:8080")
+        kwargs = _build_provider_kwargs(ProviderType.ANTHROPIC, config)
+        assert kwargs == {"proxy": "http://proxy:8080"}
+
+    def test_openai_compat_with_profile_base_url(self) -> None:
+        from pode_agent.core.config.schema import ModelProfile
+        from pode_agent.services.ai.factory import _build_provider_kwargs
+
+        profile = ModelProfile(
+            name="custom-llm",
+            provider=ProviderType.OPENAI_COMPAT,
+            model_name="custom-model",
+            base_url="https://llm.example.com/v1",
+            api_key="sk-custom",
+        )
+        config = GlobalConfig(model_profiles=[profile])
+        kwargs = _build_provider_kwargs(ProviderType.OPENAI_COMPAT, config)
+        assert kwargs == {"base_url": "https://llm.example.com/v1", "api_key": "sk-custom"}
+
+    def test_openai_compat_no_base_url_skipped(self) -> None:
+        from pode_agent.core.config.schema import ModelProfile
+        from pode_agent.services.ai.factory import _build_provider_kwargs
+
+        profile = ModelProfile(
+            name="no-url",
+            provider=ProviderType.OPENAI_COMPAT,
+            model_name="test",
+        )
+        config = GlobalConfig(model_profiles=[profile])
+        kwargs = _build_provider_kwargs(ProviderType.OPENAI_COMPAT, config)
+        assert "base_url" not in kwargs
