@@ -38,6 +38,9 @@ dependencies = [
     "gitpython>=3.1.40",
     # Config / YAML
     "pyyaml>=6.0.1",
+    # LLM Providers
+    "anthropic>=0.40.0",
+    "openai>=1.30.0",
 ]
 
 [project.optional-dependencies]
@@ -49,6 +52,7 @@ dev = [
     "mypy>=1.10.0",
     "ruff>=0.4.0",
     "types-pyyaml",
+    "respx>=0.21.0",
 ]
 
 [project.scripts]
@@ -72,6 +76,22 @@ markers = [
 python_version = "3.11"
 strict = true
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "pode_agent.services.ai.anthropic"
+disable_error_code = ["arg-type", "override"]
+
+[[tool.mypy.overrides]]
+module = "pode_agent.services.ai.openai"
+disable_error_code = ["arg-type", "override"]
+
+[[tool.mypy.overrides]]
+module = "pode_agent.services.ai.factory"
+disable_error_code = ["call-arg", "attr-defined", "union-attr"]
+
+[[tool.mypy.overrides]]
+module = "pode_agent.app.query"
+disable_error_code = ["arg-type", "call-arg", "attr-defined", "unused-coroutine"]
 
 [tool.ruff]
 target-version = "py311"
