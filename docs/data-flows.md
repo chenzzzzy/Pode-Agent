@@ -114,6 +114,7 @@ SessionManager       PermissionEngine     UI (React/Ink)      BashTool        Sh
 ### 伪代码（check_permissions_and_call_tool）
 
 > 📖 **单个工具调用的完整管线（含 Hook、权限、Schema 验证）详见** [agent-loop.md — check_permissions_and_call_tool 完整管线](./agent-loop.md#check_permissions_and_call_tool-完整管线)。  
+> **工具权限系统的完整规格（needsPermissions、PermissionMode、批量/单次权限）详见** [tools-system.md — 权限系统与工具系统的耦合点](./tools-system.md#权限系统与工具系统的耦合点)。  
 > 本节仅展示权限检查与工具执行的核心分支，完整 9 步管线请参阅该文档。
 
 ```python

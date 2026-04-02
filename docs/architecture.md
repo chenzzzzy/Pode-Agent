@@ -381,6 +381,8 @@ src/ui/ ←→ (JSON-RPC over stdio) ←→ entrypoints/ui_bridge.py
 
 ### 1. Tool 抽象基类（`core/tools/base.py`）
 
+> 📖 **工具系统完整规格（目录结构、注册/发现、与 LLM 的连接、权限耦合）详见** [tools-system.md](./tools-system.md)。
+
 ```python
 from abc import ABC, abstractmethod
 from typing import AsyncGenerator, Any
@@ -527,6 +529,9 @@ class SessionManager:
 ---
 
 ### 4. Permission Engine（`core/permissions/engine.py`）
+
+> 📖 **权限系统与工具系统的完整耦合关系详见** [tools-system.md — 权限系统与工具系统的耦合点](./tools-system.md#权限系统与工具系统的耦合点)；  
+> **Plan Mode 下的权限约束详见** [plan-mode.md — 权限系统与 Plan Mode](./plan-mode.md#权限系统与-plan-mode)。
 
 ```python
 class PermissionEngine:
