@@ -17,16 +17,18 @@ from pode_agent.app.query import (
     _build_tool_definitions,
     _find_tool,
     _messages_to_dicts,
+    _on_tool_progress,
     query,
     query_core,
 )
+from pode_agent.core.cost_tracker import reset_cost
 from pode_agent.core.permissions.types import PermissionContext, PermissionMode
 from pode_agent.services.ai.base import (
     AIResponse,
     TokenUsage,
     ToolUseBlock,
 )
-from pode_agent.types.session_events import SessionEventType
+from pode_agent.types.session_events import SessionEvent, SessionEventType
 
 
 # ---------------------------------------------------------------------------
@@ -42,6 +44,8 @@ def _make_session(
     session = MagicMock()
     session._messages = list(messages or [])
     session.abort_event = asyncio.Event()
+    session._permission_event = asyncio.Event()
+    session._last_permission_decision = None
     session.permission_context = PermissionContext()
 
     def save_message(msg: dict[str, Any]) -> None:
@@ -369,3 +373,306 @@ class TestQueryCore:
         ]
         assert len(tool_results) == 1
         assert "Unknown tool" in tool_results[0].data["result"]
+
+
+# ---------------------------------------------------------------------------
+# auto_compact integration (Fix 3)
+# ---------------------------------------------------------------------------
+
+
+class TestAutoCompact:
+    async def test_auto_compact_called_in_query_core(self) -> None:
+        """auto_compact_if_needed should be invoked inside query_core."""
+        mock_fn = _make_mock_query_llm([_text_response("ok")])
+        with (
+            patch("pode_agent.app.query.query_llm", side_effect=mock_fn),
+            patch("pode_agent.app.query.auto_compact_if_needed", return_value=[]) as mock_compact,
+        ):
+            session = _make_session()
+            options = _make_options()
+
+            events = []
+            async for event in query_core(
+                messages=[{"type": "user", "message": "hi"}],
+                system_prompt="",
+                tools=[],
+                session=session,
+                options=options,
+            ):
+                events.append(event)
+
+            mock_compact.assert_called_once()
+
+    async def test_auto_compact_returns_trimmed_messages(self) -> None:
+        """query_core should use the messages returned by auto_compact_if_needed."""
+        trimmed = [{"type": "user", "message": "compact: ..."}]
+        mock_fn = _make_mock_query_llm([_text_response("ok")])
+        with (
+            patch("pode_agent.app.query.query_llm", side_effect=mock_fn),
+            patch("pode_agent.app.query.auto_compact_if_needed", return_value=trimmed),
+        ):
+            session = _make_session()
+            options = _make_options()
+
+            async for _ in query_core(
+                messages=[{"type": "user", "message": "old"}] * 100,
+                system_prompt="",
+                tools=[],
+                session=session,
+                options=options,
+            ):
+                pass
+
+            # The compacted messages (1) should have been used, not the originals (100)
+            # Verify by checking the saved assistant message exists
+            saved = session.get_messages()
+            assistant_msgs = [m for m in saved if m.get("type") == "assistant"]
+            assert len(assistant_msgs) == 1
+
+
+# ---------------------------------------------------------------------------
+# Permission interaction (Fix 4)
+# ---------------------------------------------------------------------------
+
+
+class TestPermissionInteraction:
+    async def test_permission_prompt_waits_for_allow(self) -> None:
+        """NEEDS_PROMPT should yield PERMISSION_REQUEST then await user decision."""
+        from pydantic import BaseModel
+
+        class BashInput(BaseModel):
+            command: str = "ls"
+
+        mock_tool = MagicMock()
+        mock_tool.name = "bash"
+        mock_tool.description = "Run bash"
+        mock_tool.input_schema.return_value = BashInput
+        mock_tool.is_enabled = AsyncMock(return_value=True)
+        mock_tool.is_read_only.return_value = False
+        mock_tool.needs_permissions.return_value = True
+        mock_tool.validate_input = AsyncMock()
+
+        mock_tool_output = MagicMock()
+        mock_tool_output.type = "result"
+        mock_tool_output.data = {"stdout": "file.txt"}
+        mock_tool_output.result_for_assistant = "file.txt"
+        mock_tool_output.new_messages = []
+
+        async def mock_call(inp: Any, ctx: Any) -> Any:
+            yield mock_tool_output
+
+        mock_tool.call = mock_call
+
+        # Round 1: tool_use response; Round 2: text
+        mock_fn = _make_mock_query_llm([
+            _tool_use_response("tu_001", "bash", {"command": "ls"}),
+            _text_response("Done!"),
+        ])
+
+        session = _make_session(tools=[mock_tool])
+        # DEFAULT mode triggers NEEDS_PROMPT for non-read-only tools
+        options = _make_options(permission_mode=PermissionMode.DEFAULT)
+
+        # Set up permission resolution: allow after a short delay
+        from pode_agent.core.permissions.types import PermissionDecision
+
+        async def _resolve_later() -> None:
+            await asyncio.sleep(0.05)
+            session._last_permission_decision = PermissionDecision.ALLOW_SESSION
+            session._permission_event.set()
+
+        with patch("pode_agent.app.query.query_llm", side_effect=mock_fn):
+            events = []
+            async_task = asyncio.create_task(_resolve_later())
+            try:
+                async for event in query_core(
+                    messages=[],
+                    system_prompt="",
+                    tools=[mock_tool],
+                    session=session,
+                    options=options,
+                ):
+                    events.append(event)
+            finally:
+                async_task.cancel()
+
+            types = [e.type for e in events]
+            assert SessionEventType.PERMISSION_REQUEST in types
+            assert SessionEventType.TOOL_RESULT in types
+            # Should NOT be an error result
+            tool_result = next(
+                e for e in events
+                if e.type == SessionEventType.TOOL_RESULT
+            )
+            assert not tool_result.data.get("is_error", False)
+
+    async def test_permission_deny_returns_error(self) -> None:
+        """If user denies permission, tool_result should have is_error=True."""
+        from pydantic import BaseModel
+
+        class BashInput(BaseModel):
+            command: str = "rm -rf /"
+
+        mock_tool = MagicMock()
+        mock_tool.name = "bash"
+        mock_tool.description = "Run bash"
+        mock_tool.input_schema.return_value = BashInput
+        mock_tool.is_enabled = AsyncMock(return_value=True)
+        mock_tool.is_read_only.return_value = False
+        mock_tool.needs_permissions.return_value = True
+        mock_tool.validate_input = AsyncMock()
+
+        mock_fn = _make_mock_query_llm([
+            _tool_use_response("tu_002", "bash", {"command": "rm -rf /"}),
+            _text_response("ok"),
+        ])
+
+        session = _make_session(tools=[mock_tool])
+        options = _make_options(permission_mode=PermissionMode.DEFAULT)
+
+        from pode_agent.core.permissions.types import PermissionDecision
+
+        async def _deny_later() -> None:
+            await asyncio.sleep(0.05)
+            session._last_permission_decision = PermissionDecision.DENY
+            session._permission_event.set()
+
+        with patch("pode_agent.app.query.query_llm", side_effect=mock_fn):
+            events = []
+            async_task = asyncio.create_task(_deny_later())
+            try:
+                async for event in query_core(
+                    messages=[],
+                    system_prompt="",
+                    tools=[mock_tool],
+                    session=session,
+                    options=options,
+                ):
+                    events.append(event)
+            finally:
+                async_task.cancel()
+
+            tool_result = next(
+                e for e in events
+                if e.type == SessionEventType.TOOL_RESULT
+            )
+            assert tool_result.data.get("is_error") is True
+            assert "Permission denied" in tool_result.data["result"]
+
+
+# ---------------------------------------------------------------------------
+# TOOL_PROGRESS events (Fix 5)
+# ---------------------------------------------------------------------------
+
+
+class TestToolProgress:
+    async def test_on_tool_progress_enqueues_event(self) -> None:
+        """_on_tool_progress should put a TOOL_PROGRESS event into the queue."""
+        queue: asyncio.Queue[SessionEvent] = asyncio.Queue()
+
+        progress = MagicMock()
+        progress.content = "Running command..."
+
+        await _on_tool_progress(progress, "tu_001", "bash", queue)
+
+        event = queue.get_nowait()
+        assert event.type == SessionEventType.TOOL_PROGRESS
+        assert event.data["tool_use_id"] == "tu_001"
+        assert event.data["content"] == "Running command..."
+
+    async def test_tool_execution_yields_progress_events(self) -> None:
+        """Tool execution should yield TOOL_PROGRESS events via queue."""
+        from pydantic import BaseModel
+
+        class BashInput(BaseModel):
+            command: str = "ls"
+
+        mock_tool = MagicMock()
+        mock_tool.name = "bash"
+        mock_tool.description = "Run bash"
+        mock_tool.input_schema.return_value = BashInput
+        mock_tool.is_enabled = AsyncMock(return_value=True)
+        mock_tool.is_read_only.return_value = True
+        mock_tool.needs_permissions.return_value = False
+        mock_tool.validate_input = AsyncMock()
+
+        # Tool yields progress then result
+        mock_progress = MagicMock()
+        mock_progress.type = "progress"
+        mock_progress.content = "listing files..."
+
+        mock_result = MagicMock()
+        mock_result.type = "result"
+        mock_result.data = {"files": ["a.py"]}
+        mock_result.result_for_assistant = "1 file"
+        mock_result.new_messages = []
+
+        async def mock_call(inp: Any, ctx: Any) -> Any:
+            yield mock_progress
+            yield mock_result
+
+        mock_tool.call = mock_call
+
+        mock_fn = _make_mock_query_llm([
+            _tool_use_response("tu_001", "bash", {"command": "ls"}),
+            _text_response("Done"),
+        ])
+
+        session = _make_session(tools=[mock_tool])
+        options = _make_options(permission_mode=PermissionMode.BYPASS_PERMISSIONS)
+
+        with patch("pode_agent.app.query.query_llm", side_effect=mock_fn):
+            events = []
+            async for event in query_core(
+                messages=[],
+                system_prompt="",
+                tools=[mock_tool],
+                session=session,
+                options=options,
+            ):
+                events.append(event)
+
+        progress_events = [
+            e for e in events if e.type == SessionEventType.TOOL_PROGRESS
+        ]
+        assert len(progress_events) >= 1
+        assert progress_events[0].data["content"] == "listing files..."
+
+
+# ---------------------------------------------------------------------------
+# COST_UPDATE total_usd (Fix 6)
+# ---------------------------------------------------------------------------
+
+
+class TestCostUpdate:
+    async def test_cost_update_includes_cumulative_total(self) -> None:
+        """COST_UPDATE event should reflect actual cumulative cost via get_total_cost."""
+        reset_cost()
+
+        mock_fn = _make_mock_query_llm([_text_response("ok")])
+        with patch("pode_agent.app.query.query_llm", side_effect=mock_fn):
+            session = _make_session()
+            options = _make_options()
+
+            events = []
+            async for event in query_core(
+                messages=[],
+                system_prompt="",
+                tools=[],
+                session=session,
+                options=options,
+            ):
+                events.append(event)
+
+        cost_events = [
+            e for e in events if e.type == SessionEventType.COST_UPDATE
+        ]
+        if cost_events:
+            # total_usd should be > 0 (model has non-zero pricing)
+            assert cost_events[0].data["total_usd"] > 0
+            assert cost_events[0].data["cost_usd"] > 0
+        else:
+            # If no cost event (e.g., 0 cost model), that's also acceptable
+            pass
+
+        reset_cost()

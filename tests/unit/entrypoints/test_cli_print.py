@@ -177,3 +177,31 @@ class TestConfigList:
         assert result.exit_code == 0
         assert "theme" in result.output
         assert "model" in result.output
+
+
+# ---------------------------------------------------------------------------
+# ToolLoader integration (Fix 1)
+# ---------------------------------------------------------------------------
+
+
+class TestToolLoaderIntegration:
+    @patch("pode_agent.core.tools.loader.ToolLoader")
+    @patch("pode_agent.core.tools.registry.ToolRegistry")
+    @patch("pode_agent.entrypoints.cli.asyncio")
+    def test_tool_loader_called_on_print_mode(
+        self,
+        mock_asyncio: MagicMock,
+        mock_registry_cls: MagicMock,
+        mock_loader_cls: MagicMock,
+    ) -> None:
+        """ToolLoader._load_builtin_tools() should be called in print mode."""
+        mock_asyncio.run.return_value = 0
+        mock_registry = MagicMock()
+        mock_registry.tools = []
+        mock_registry_cls.return_value = mock_registry
+        mock_loader = MagicMock()
+        mock_loader_cls.return_value = mock_loader
+
+        result = runner.invoke(app, ["test prompt"])
+        assert result.exit_code == 0
+        mock_loader._load_builtin_tools.assert_called_once()

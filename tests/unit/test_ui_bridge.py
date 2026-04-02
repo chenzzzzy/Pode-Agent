@@ -193,3 +193,34 @@ class TestEventToNotification:
         assert method == "session/cost_update"
         assert params["cost_usd"] == 0.01
         assert params["total_usd"] == 0.05
+
+
+# --- _ensure_session ToolLoader integration (Fix 1) ---
+
+
+class TestEnsureSessionToolLoading:
+    def test_ensure_session_loads_builtin_tools(self) -> None:
+        """_ensure_session() should create ToolLoader and call _load_builtin_tools."""
+        from unittest.mock import patch
+
+        mock_loader = MagicMock()
+        mock_registry = MagicMock()
+        mock_registry.tools = []
+
+        with (
+            patch("pode_agent.core.tools.registry.ToolRegistry", return_value=mock_registry),
+            patch("pode_agent.core.tools.loader.ToolLoader", return_value=mock_loader),
+            patch(
+                "pode_agent.core.config.loader.get_global_config",
+                return_value=MagicMock(default_model_name="test-model"),
+            ),
+        ):
+            bridge = UIBridge.__new__(UIBridge)
+            bridge._session = None
+            bridge._server = None
+            bridge._running = False
+
+            session = bridge._ensure_session()
+
+            mock_loader._load_builtin_tools.assert_called_once()
+            assert session is not None
