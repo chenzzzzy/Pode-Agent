@@ -1,6 +1,6 @@
 # Pode-Agent 分阶段实施计划
 
-> 版本：1.2.0 | 状态：Phase 1 已完成 | 更新：2026-04-01
+> 版本：1.3.0 | 状态：Phase 2 已完成 | 更新：2026-04-01
 > **给 Code Agent 的说明**：请严格按照阶段顺序实施。每个阶段结束时运行对应验收测试，通过后才能进入下一阶段。
 
 ---
@@ -343,12 +343,13 @@ uv run pytest tests/ -v        # 198 passed, 1 skipped
 
 ---
 
-## Phase 2：LLM 集成与会话管理
+## Phase 2：LLM 集成与会话管理 ✅ 已完成
 
-**目标**：实现完整的 LLM 对话循环（非交互打印模式），支持 Anthropic 和 OpenAI。  
-**时间**：Weeks 5-7（15 个工作日）  
-**依赖**：Phase 1 完成  
+**目标**：实现完整的 LLM 对话循环（非交互打印模式），支持 Anthropic 和 OpenAI。
+**时间**：Weeks 5-7（15 个工作日）
+**依赖**：Phase 1 完成
 **负责 Agent**：LLM 集成 Agent
+**实际完成日期**：2026-04-01
 
 > 📖 **本阶段核心交付物 `app/query.py`（Agentic Loop）的设计规格详见** [agent-loop.md](./agent-loop.md)。  
 > Phase 2 实现基础版本（无 Hook、无 Auto-compact）；各组件的完整版本在后续阶段完成（见下表）。
@@ -390,14 +391,14 @@ uv run pytest tests/ -v        # 198 passed, 1 skipped
 - 错误处理（速率限制、认证错误、网络错误）
 
 **验收标准**：
-- [ ] 基本文本查询成功
-- [ ] 工具调用返回正确的 tool_use block
-- [ ] 速率限制时自动退避重试
-- [ ] Mock 测试通过（不调用真实 API）
+- [x] 基本文本查询成功
+- [x] 工具调用返回正确的 tool_use block
+- [x] 速率限制时自动退避重试
+- [x] Mock 测试通过（不调用真实 API）
 
 ---
 
-#### 任务 2.2：OpenAI 适配器（Week 6，Day 1-3）
+#### 任务 2.2：OpenAI 适配器（Week 6，Day 1-3） ✅
 
 **文件**：`pode_agent/services/ai/openai.py`
 
@@ -410,7 +411,7 @@ uv run pytest tests/ -v        # 198 passed, 1 skipped
 
 ---
 
-#### 任务 2.3：ModelAdapterFactory（Week 6，Day 4-5）
+#### 任务 2.3：ModelAdapterFactory（Week 6，Day 4-5） ✅
 
 **文件**：`pode_agent/services/ai/factory.py`
 
@@ -421,7 +422,7 @@ uv run pytest tests/ -v        # 198 passed, 1 skipped
 
 ---
 
-#### 任务 2.4：消息规范化（Week 6，Day 5 - Week 7，Day 1）
+#### 任务 2.4：消息规范化（Week 6，Day 5 - Week 7，Day 1） ✅
 
 **文件**：`pode_agent/utils/messages/normalizer.py`
 
@@ -432,7 +433,7 @@ uv run pytest tests/ -v        # 198 passed, 1 skipped
 
 ---
 
-#### 任务 2.5：Agentic Loop 核心引擎（Week 7，Day 1-3）
+#### 任务 2.5：Agentic Loop 核心引擎（Week 7，Day 1-3） ✅
 
 **文件**：`pode_agent/app/query.py`（新建）
 
@@ -450,7 +451,7 @@ Hook 系统在 Phase 5 实现，Auto-compact 在 Phase 6 实现。
 
 ---
 
-#### 任务 2.6：完整会话管理器（Week 7，Day 3-4）
+#### 任务 2.6：完整会话管理器（Week 7，Day 3-4） ✅
 
 **文件**：`pode_agent/app/session.py`（完整实现）
 
@@ -465,7 +466,7 @@ Hook 系统在 Phase 5 实现，Auto-compact 在 Phase 6 实现。
 
 ---
 
-#### 任务 2.7：非交互打印模式（Week 7，Day 5）
+#### 任务 2.7：非交互打印模式（Week 7，Day 5） ✅
 
 **文件**：`pode_agent/app/print_mode.py`
 
@@ -475,13 +476,13 @@ Hook 系统在 Phase 5 实现，Auto-compact 在 Phase 6 实现。
 - 退出码（0=成功，1=错误，2=权限拒绝）
 
 **验收标准**：
-- [ ] `Pode "What is 2+2?"` 打印回答然后退出
-- [ ] 工具调用在打印模式下正确执行
-- [ ] `Pode -p "list files" --output-format json` 输出有效 JSON
+- [x] `Pode "What is 2+2?"` 打印回答然后退出
+- [x] 工具调用在打印模式下正确执行
+- [x] `Pode -p "list files" --output-format json` 输出有效 JSON
 
 ---
 
-### Phase 2 完成标志
+### Phase 2 完成标志 ✅
 
 **Agentic Loop 核心引擎交付物**（对应 [agent-loop.md](./agent-loop.md)）：
 - [x] `app/query.py`: `query()` / `query_core()` 递归主循环
@@ -493,15 +494,35 @@ Hook 系统在 Phase 5 实现，Auto-compact 在 Phase 6 实现。
 ```bash
 # MVP 可用
 export ANTHROPIC_API_KEY=sk-ant-...
-Pode "What files are in this directory?"
+pode "What files are in this directory?"
 # 期望：调用 GlobTool，返回文件列表
 
-Pode "Edit main.py to add a docstring to main()"
+pode "Edit main.py to add a docstring to main()"
 # 期望：调用 FileReadTool、FileEditTool，完成编辑
 
-Pode "Run the tests and tell me if they pass"
-# 期望：调用 BashTool("npm test")，分析结果
+pode "Run the tests and tell me if they pass"
+# 期望：调用 BashTool("pytest tests/ -v")，分析结果
 ```
+
+**验收验证**：
+```bash
+uv run mypy pode_agent/        # Success: no issues found in 58 source files
+uv run ruff check pode_agent/  # All checks passed
+uv run pytest tests/ -q        # 318 passed, 1 skipped
+```
+
+**实际交付物**：
+- 58 个 Python 源文件（pode_agent/），新增 14 个
+- 11 个新测试文件，共 318 个测试全部通过
+- Anthropic 适配器：流式查询、tool_use、Extended thinking、Bedrock 支持、错误重试
+- OpenAI 适配器：Chat Completions 流式、Function calling、reasoning_effort、代理支持
+- ModelAdapterFactory：模型名前缀路由、能力查询、自定义 provider 注册
+- 消息规范化：Anthropic/OpenAI 格式互转、工具结果构建
+- Agentic Loop 核心引擎：`query()`/`query_core()` 递归主循环、串行 ToolUseQueue、权限检查管道
+- SessionManager 完整实现：`process_input()`、成本追踪、权限决议、JSONL 恢复
+- Print Mode：单次查询非交互执行，text/JSON 输出，退出码语义
+- CLI 集成：`pode "prompt"` + --model/-m, --output-format/-f, --verbose, --safe
+- mypy strict mode 零错误，ruff 零告警
 
 ---
 
@@ -915,11 +936,11 @@ python -m build && twine upload dist/*
 
 | 标准 | Phase 0 | Phase 1 | Phase 2 | Phase 3 | Phase 4 | Phase 5 | Phase 6 |
 |------|---------|---------|---------|---------|---------|---------|---------|
-| mypy 零错误 | ✅ Done | ✅ Done (44 files) | ✅ | ✅ | ✅ | ✅ | ✅ |
-| ruff lint 通过 | ✅ Done | ✅ Done | ✅ | ✅ | ✅ | ✅ | ✅ |
-| pytest 通过 | ✅ Done (35) | ✅ Done (198) | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 新功能有测试 | ✅ Done | ✅ Done (11 files) | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 文档更新 | ✅ Done | ✅ Done | ✅ | ✅ | ✅ | ✅ | ✅ |
+| mypy 零错误 | ✅ Done | ✅ Done (44 files) | ✅ Done (58 files) | ✅ | ✅ | ✅ | ✅ |
+| ruff lint 通过 | ✅ Done | ✅ Done | ✅ Done | ✅ | ✅ | ✅ | ✅ |
+| pytest 通过 | ✅ Done (35) | ✅ Done (198) | ✅ Done (318) | ✅ | ✅ | ✅ | ✅ |
+| 新功能有测试 | ✅ Done | ✅ Done (11 files) | ✅ Done (22 files) | ✅ | ✅ | ✅ | ✅ |
+| 文档更新 | ✅ Done | ✅ Done | ✅ Done | ✅ | ✅ | ✅ | ✅ |
 
 ### 最终发布验收标准
 
