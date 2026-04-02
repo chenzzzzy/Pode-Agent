@@ -127,6 +127,10 @@ async def _wait_for_process(
                     exit_code=-1,
                 )
 
+            if comm_task not in done:
+                # Timeout — neither task completed
+                raise TimeoutError
+
             # Process completed — get result from the communicate task
             stdout_bytes, stderr_bytes = comm_task.result()
         else:

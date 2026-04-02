@@ -1,635 +1,523 @@
-# Pode-Agent Plan Mode（规划模式）
+# Pode-Agent 计划模式（Plan Mode）
 
 > 版本：1.0.0 | 状态：草稿 | 更新：2026-04-01  
-> 本文档是 **Plan Mode 规划机制的权威设计文档**，描述如何在多步任务中先规划后执行。  
-> 工具系统（工具注册/发现/权限）见 [tools-system.md](./tools-system.md)；  
-> Agentic Loop 的 System Prompt 注入点见 [agent-loop.md](./agent-loop.md)。
+> 本文档是 **Plan Mode（计划模式）的权威设计文档**，涵盖目标原则、数据结构、存储方案、Enter/Exit 机制、多步执行流程、与 Agent Loop 的耦合，以及分阶段实现建议。  
+> 核心循环调度细节（query_core 递归、ToolUseQueue、Hook 系统）请参阅 [agent-loop.md](./agent-loop.md)。  
+> 工具层权限硬拒绝机制请参阅 [tools-system.md](./tools-system.md#权限系统与工具的耦合点)。
 
 ---
 
 ## 目录
 
-1. [目标与原则](#目标与原则)
-2. [Plan 的数据结构与存储](#plan-的数据结构与存储)
-3. [进入/退出 Plan Mode 的工具](#进入退出-plan-mode-的工具)
-4. [Plan Mode 的五阶段工作流](#plan-mode-的五阶段工作流)
-5. [与 Agent Loop 的耦合点](#与-agent-loop-的耦合点)
-6. [System Prompt 动态注入](#system-prompt-动态注入)
-7. [权限系统与 Plan Mode](#权限系统与-plan-mode)
-8. [多步任务的落地方式](#多步任务的落地方式)
-9. [与 TaskTool/子 Agent 的关系](#与-taskTool子-agent-的关系)
-10. [Kode-Agent → Pode-Agent 映射表](#kode-agent--pode-agent-映射表)
-11. [分阶段实现建议](#分阶段实现建议)
+1. [Plan Mode 目标与原则](#plan-mode-目标与原则)
+2. [Plan 数据结构与生命周期](#plan-数据结构与生命周期)
+3. [存储方案 A：写入 Session JSONL](#存储方案-a写入-session-jsonl)
+4. [进入与退出 Plan Mode 的工具](#进入与退出-plan-mode-的工具)
+5. [多步任务如何落地执行](#多步任务如何落地执行)
+6. [与 Agent Loop 的耦合点](#与-agent-loop-的耦合点)
+7. [与 SubAgent / TaskTool 的关系](#与-subagent--tasktool-的关系)
+8. [分阶段实现建议](#分阶段实现建议)
+9. [映射表：Kode-Agent → Pode-Agent](#映射表kode-agent--pode-agent)
 
 ---
 
-## 目标与原则
+## Plan Mode 目标与原则
 
-**Plan Mode** 实现"先探索/设计/列计划，再执行"的约束工作流。  
-其核心价值：
+### 核心目标
 
-- **防止意外修改**：在用户批准计划前，Agent 不得写文件、执行 Shell 命令等破坏性操作。
-- **提高对齐度**：复杂多步任务在执行前先与用户达成一致，避免"做完了才发现方向错误"。
-- **可审计**：计划以 Markdown 文件形式存储在磁盘，用户可手动查看和修改。
+**先规划，后执行**——在进行任何写操作（文件修改、代码执行等）之前，先通过只读探索生成一份人类可审查的计划，用户确认后再开始执行。
 
-### 何时使用 Plan Mode
+这解决了 AI Agent 的常见问题：**在没有充分理解情况下就开始修改文件**，导致难以回滚的意外操作。
 
-Agent 应主动进入 Plan Mode 的场景（对应 Kode-Agent EnterPlanMode 工具的 prompt 文档）：
+### 设计原则
 
-| 场景 | 示例 |
-|------|------|
-| 新功能实现 | "添加用户认证" — 需要架构决策 |
-| 多种可行方案 | "优化数据库查询" — 有多种策略 |
-| 影响现有代码结构 | "重构认证流程" — 影响多个文件 |
-| 架构决策 | "添加实时更新" — WebSocket vs SSE vs Polling |
-| 多文件变更 | 预计修改超过 2-3 个文件 |
-| 需求不明确 | "让应用更快" — 需要先探索才能理解范围 |
+1. **只读探索阶段**：进入 Plan Mode 后，Agent 只能使用只读工具（文件读取、搜索、grep 等）收集信息，不得写入任何文件或执行有副作用的命令
 
-**不需要** Plan Mode 的场景：单行修复、明显的 bug 修正、用户已给出非常具体的指令。
+2. **两种限制层次并存**：
+   - **软约束**：System prompt additions 引导 LLM 只进行探索性操作
+   - **硬拒绝（策略 B）**：`PermissionMode.PLAN` 使 `PermissionEngine` 在工具层直接拒绝所有非只读工具（`is_read_only() == False`），不询问用户
 
-### 基本约束
+3. **计划透明可审**：计划输出给用户审查，包含目标、步骤、风险、验收标准等结构化内容
 
-Plan Mode 激活期间：
+4. **边界清晰**：计划阶段（只读）和执行阶段（可写）有明确的切换点（`ExitPlanMode` 工具触发）
 
-1. Agent **只能使用只读工具**（`tool.is_read_only() == True`）。
-2. 唯一的例外：**计划文件**（`~/.pode/plans/{slug}.md`）允许写入/编辑。
-3. 上述约束**优先于其他任何 system prompt 中的指令**（通过 `<system-reminder>` 标签强制注入）。
+5. **可恢复性**：计划内容持久化到 Session JSONL，重启后可继续按计划推进
 
 ---
 
-## Plan 的数据结构与存储
+## Plan 数据结构与生命周期
 
-### Plan Slug（计划标识符）
-
-每个 Plan Mode 会话生成一个唯一的"slug"，格式为三词组合：
-
-```
-{形容词}-{动词}-{名词}
-例如：swift-building-river
-     careful-fixing-mountain
-```
-
-Slug 由随机选词生成（对应 Kode-Agent 的 `planSlugWords.ts`），保证在 plans 目录中唯一。  
-Pode-Agent 实现：
+### Plan 标识
 
 ```python
-# pode_agent/app/plan_state.py
+# pode_agent/app/plan.py（或 pode_agent/types/plan.py）
 
-import random
-from .plan_slug_words import ADJECTIVES, VERBS, NOUNS
+import uuid
+from pydantic import BaseModel, Field
+from datetime import datetime, timezone
 
-def generate_plan_slug() -> str:
-    """生成 {adjective}-{verb}-{noun} 格式的唯一 slug"""
-    return f"{random.choice(ADJECTIVES)}-{random.choice(VERBS)}-{random.choice(NOUNS)}"
+class PlanStep(BaseModel):
+    """计划中的单个执行步骤"""
+    index: int                          # 步骤序号（1-based）
+    title: str                          # 步骤标题（人类可读）
+    description: str                    # 详细描述
+    tools: list[str] = []               # 预计使用的工具（提示性）
+    status: "StepStatus" = "pending"    # pending | running | done | skipped | failed
+    result_summary: str | None = None   # 执行后填入结果摘要
+
+class StepStatus(str, Enum):
+    PENDING = "pending"
+    RUNNING = "running"
+    DONE = "done"
+    SKIPPED = "skipped"
+    FAILED = "failed"
+
+class Plan(BaseModel):
+    """计划对象（完整结构）"""
+    plan_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    slug: str | None = None             # 可读标识（如 "refactor-auth-module"）
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+    # ── 计划内容 ───────────────────────────────────────────
+    objective: str                      # 总目标（一句话）
+    research_notes: str | None = None   # 探索阶段收集的信息
+    steps: list[PlanStep] = []          # 执行步骤列表
+    acceptance_criteria: list[str] = [] # 验收标准
+    risks: list[str] = []               # 潜在风险
+    rollback_plan: str | None = None    # 回滚方案
+    test_matrix: str | None = None      # 测试矩阵
+
+    # ── 状态 ───────────────────────────────────────────────
+    status: "PlanStatus" = "draft"      # draft | approved | executing | done | cancelled
+
+class PlanStatus(str, Enum):
+    DRAFT = "draft"                     # 生成中/未确认
+    APPROVED = "approved"               # 用户已确认，等待执行
+    EXECUTING = "executing"             # 执行中
+    DONE = "done"                       # 完成
+    CANCELLED = "cancelled"             # 取消
 ```
 
-### Plan 存储位置
+### Plan 生命周期
 
 ```
-~/.pode/
-└── plans/
-    ├── {slug}.md                    ← 主 Agent 的计划文件
-    └── {slug}-agent-{agent_id}.md   ← 子 Agent（TaskTool）的计划文件
-```
-
-计划文件是**纯 Markdown 格式**，由 Agent 自由书写。  
-框架不规定内容格式，但建议包含：
-
-```markdown
-# 实现计划：{任务简述}
-
-## 背景
-- 当前状况描述
-- 探索发现的关键信息
-
-## 实现步骤
-1. 步骤一：描述 + 涉及文件
-2. 步骤二：描述 + 涉及文件
-...
-
-## 关键文件
-- `path/to/file.py`：说明作用
-
-## 风险与注意事项
-- 风险一：...
-
-## 验收标准
-- [ ] 条件一
-- [ ] 条件二
-```
-
-### Conversation Key（会话键）
-
-Plan Mode 状态以"conversation key"为单位管理，格式为：
-
-```
-{message_log_name}:{fork_number}
-例如：2026-04-01_session_fork_0:0
-```
-
-这允许同一进程中的不同会话（fork）拥有独立的 Plan Mode 状态。
-
-### 状态机
-
-```
-初始状态
+用户输入复杂任务
     │
-    │ EnterPlanModeTool 调用（用户批准）
     ▼
-[PLAN_MODE_ACTIVE]
-    │  只读工具可用
-    │  写文件权限拒绝
-    │  system-reminder 周期性注入
+【计划阶段】EnterPlanModeTool 被调用
+    │  PermissionMode = PLAN
+    │  System prompt additions 注入
     │
-    │ ExitPlanModeTool 调用（用户批准计划）
     ▼
-[PLAN_APPROVED]
-    │  恢复完整工具集
-    │  system-reminder 注入"已退出计划模式"提示
+Agent 只读探索（文件读取/搜索/grep...）
+    │
     ▼
-[EXECUTING]（Agent 开始实现计划）
+ExitPlanModeTool 被调用，输出 Plan 对象
+    │  写入 JSONL（plan_created 事件）
+    │  PermissionMode 重置为 DEFAULT
+    │
+    ▼
+用户审查计划（UI 显示结构化 Plan）
+    │
+    ├── 拒绝 → plan status = cancelled，回到普通对话
+    └── 批准 → plan status = approved
+              │
+              ▼
+        【执行阶段】按步骤推进
+              │  每步完成后写入 JSONL（plan_step_done 事件）
+              │
+              ▼
+        所有步骤完成 → plan status = done
 ```
 
 ---
 
-## 进入/退出 Plan Mode 的工具
+## 存储方案 A：写入 Session JSONL
+
+**决策**：计划数据全部以事件形式写入 Session JSONL，不单独创建计划文件。
+
+### JSONL 事件格式
+
+Session JSONL 文件（`~/.pode/logs/<session_id>.jsonl`）中，每行是一个 JSON 对象：
+
+```jsonl
+{"type": "user_message", "id": "msg_001", "content": "帮我重构 auth 模块", "ts": "2026-04-01T10:00:00Z"}
+{"type": "assistant_message", "id": "msg_002", "content": "我来先分析代码结构...", "ts": "2026-04-01T10:00:02Z"}
+{"type": "tool_use", "tool_use_id": "tu_001", "tool_name": "enter_plan_mode", "input": {}, "ts": "2026-04-01T10:00:05Z"}
+{"type": "tool_result", "tool_use_id": "tu_001", "content": "已进入计划模式", "ts": "2026-04-01T10:00:05Z"}
+{"type": "plan_created", "plan_id": "plan_abc123", "slug": "refactor-auth-module", "data": {...Plan 完整 JSON...}, "ts": "2026-04-01T10:01:00Z"}
+{"type": "plan_approved", "plan_id": "plan_abc123", "ts": "2026-04-01T10:01:30Z"}
+{"type": "plan_step_start", "plan_id": "plan_abc123", "step_index": 1, "ts": "2026-04-01T10:01:31Z"}
+{"type": "plan_step_done", "plan_id": "plan_abc123", "step_index": 1, "result_summary": "已完成...", "ts": "2026-04-01T10:02:00Z"}
+{"type": "plan_done", "plan_id": "plan_abc123", "ts": "2026-04-01T10:05:00Z"}
+```
+
+### 对应的 Pydantic 事件模型
+
+```python
+# pode_agent/types/session_events.py（或 pode_agent/types/conversation.py 扩展）
+
+class PlanCreatedEvent(BaseModel):
+    type: Literal["plan_created"] = "plan_created"
+    plan_id: str
+    slug: str | None = None
+    data: Plan                          # 完整 Plan 对象序列化
+
+class PlanApprovedEvent(BaseModel):
+    type: Literal["plan_approved"] = "plan_approved"
+    plan_id: str
+
+class PlanStepStartEvent(BaseModel):
+    type: Literal["plan_step_start"] = "plan_step_start"
+    plan_id: str
+    step_index: int
+
+class PlanStepDoneEvent(BaseModel):
+    type: Literal["plan_step_done"] = "plan_step_done"
+    plan_id: str
+    step_index: int
+    result_summary: str | None = None
+
+class PlanDoneEvent(BaseModel):
+    type: Literal["plan_done"] = "plan_done"
+    plan_id: str
+
+class PlanCancelledEvent(BaseModel):
+    type: Literal["plan_cancelled"] = "plan_cancelled"
+    plan_id: str
+    reason: str | None = None
+```
+
+### 会话恢复（Replay）
+
+JSONL 格式天然支持重放：
+
+```python
+# pode_agent/app/session.py
+
+async def load_plan_from_log(session_log_path: str) -> Plan | None:
+    """
+    从 JSONL 日志中恢复最近的活跃计划。
+    
+    扫描 plan_created / plan_approved / plan_step_done / plan_done 事件，
+    重建 Plan 对象的当前状态（已完成哪些步骤）。
+    
+    Returns:
+        最近的未完成 Plan，或 None（若无活跃计划）
+    """
+```
+
+---
+
+## 进入与退出 Plan Mode 的工具
 
 ### EnterPlanModeTool
 
-**文件**：`pode_agent/tools/agent/plan_mode.py`
-
 ```python
+# pode_agent/tools/agent/plan_mode.py
+
+class EnterPlanModeInput(BaseModel):
+    objective: str = Field(
+        description="The high-level objective of the plan (one sentence)"
+    )
+
 class EnterPlanModeTool(Tool):
-    name = "EnterPlanMode"
+    name = "enter_plan_mode"
+    description = (
+        "Enter plan mode to explore the codebase and create a structured plan "
+        "before making any changes. In plan mode, only read-only tools are available."
+    )
 
-    def is_read_only(self) -> bool:
-        return True  # 进入 Plan Mode 本身是只读操作
-
-    def is_concurrency_safe(self) -> bool:
-        return True
+    def is_read_only(self, input=None) -> bool:
+        return True  # 进入计划模式本身是只读操作
 
     def needs_permissions(self, input=None) -> bool:
-        return True  # 需要用户明确批准才能进入计划模式
+        return False  # 无需权限确认
 
-    def requires_user_interaction(self) -> bool:
-        return True  # 必须等用户操作，不能自动通过
+    async def call(self, input: EnterPlanModeInput, context: ToolUseContext):
+        yield ToolOutput(type="progress", content="进入计划模式...")
 
-    async def call(self, input, context):
-        # 禁止在子 Agent 中使用
-        if context.agent_id:
-            raise ValueError("EnterPlanMode 不能在子 Agent 中使用")
+        # 1. 切换 permission mode（写入 context.options.permission_mode）
+        context.options.permission_mode = PermissionMode.PLAN
 
-        # 1. 将权限模式设置为 'plan'
-        set_permission_mode(context, PermissionMode.PLAN)
-
-        # 2. 激活 Plan Mode 状态（设置 conversation key 对应的标记）
-        enter_plan_mode(context)
-
+        # 2. 返回结果（触发 system prompt additions 更新）
         yield ToolOutput(
             type="result",
-            data={"message": "Entered plan mode."},
-            result_for_assistant=self._render_result_for_assistant(),
+            data={"mode": "plan", "objective": input.objective},
+            result_for_assistant=(
+                f"已进入计划模式。目标：{input.objective}\n"
+                "现在只有只读工具可用。请探索代码库，然后调用 exit_plan_mode 输出完整计划。"
+            ),
         )
-
-    def _render_result_for_assistant(self) -> str:
-        return """Entered plan mode. You should now focus on exploring the codebase and designing an implementation approach.
-
-In plan mode, you should:
-1. Thoroughly explore the codebase to understand existing patterns
-2. Identify similar features and architectural approaches
-3. Consider multiple approaches and their trade-offs
-4. Use AskUserQuestion if you need to clarify the approach
-5. Design a concrete implementation strategy
-6. When ready, use ExitPlanMode to present your plan for approval
-
-Remember: DO NOT write or edit any files yet. This is a read-only exploration and planning phase."""
 ```
+
+**EnterPlanModeTool 的副作用**：
+1. `context.options.permission_mode` 设为 `PermissionMode.PLAN`
+2. 触发 System Prompt 重新构建（下一轮 `query_core()` 递归时注入 plan mode additions）
+3. UI 可以监听 `permission_mode_changed` 事件，显示"计划模式"标识
 
 ### ExitPlanModeTool
 
-**文件**：`pode_agent/tools/agent/plan_mode.py`
-
 ```python
-class ExitPlanModeTool(Tool):
-    name = "ExitPlanMode"
+class ExitPlanModeInput(BaseModel):
+    plan: Plan = Field(
+        description=(
+            "The complete plan object including objective, steps, "
+            "acceptance criteria, risks, and rollback plan."
+        )
+    )
 
-    def is_read_only(self) -> bool:
-        return False  # 退出 Plan Mode 会恢复写权限
+class ExitPlanModeTool(Tool):
+    name = "exit_plan_mode"
+    description = (
+        "Exit plan mode and present the structured plan to the user for approval. "
+        "The plan will be saved and the user must approve it before execution begins."
+    )
+
+    def is_read_only(self, input=None) -> bool:
+        return True  # 退出本身也是只读（写 JSONL 由 session 层负责）
 
     def needs_permissions(self, input=None) -> bool:
-        return True  # 需要用户批准（用户审阅计划并批准）
+        return False
 
-    def requires_user_interaction(self) -> bool:
-        return True
+    async def call(self, input: ExitPlanModeInput, context: ToolUseContext):
+        yield ToolOutput(type="progress", content="生成计划...")
 
-    async def call(self, input, context):
-        plan_file_path = get_plan_file_path(context)
+        # 1. 重置 permission mode
+        context.options.permission_mode = PermissionMode.DEFAULT
 
-        # 1. 读取计划文件（必须存在）
-        content, exists = read_plan_file(context)
-        if not exists:
-            raise ValueError(
-                f"No plan file found at {plan_file_path}. "
-                "Please write your plan to this file before calling ExitPlanMode."
-            )
-
-        # 2. 退出 Plan Mode（恢复权限模式为 default）
-        exit_plan_mode(context)
-
+        # 2. 返回计划（SessionManager 监听 result.data["plan"] 并写入 JSONL）
         yield ToolOutput(
             type="result",
-            data={
-                "plan": content,
-                "file_path": plan_file_path,
-                "is_agent": bool(context.agent_id),
-            },
-            result_for_assistant=self._render_result_for_assistant(content, plan_file_path),
+            data={"event": "plan_created", "plan": input.plan.model_dump()},
+            result_for_assistant=_format_plan_for_llm(input.plan),
         )
-
-    def _render_result_for_assistant(self, plan: str, file_path: str) -> str:
-        return f"""User has approved your plan. You can now start coding.
-
-Your plan has been saved to: {file_path}
-You can refer back to it if needed during implementation.
-
-## Approved Plan:
-{plan}"""
 ```
 
-### 工具对 UI 的影响
-
-| 事件 | UI 行为 |
-|------|---------|
-| `EnterPlanModeTool` 执行成功 | 显示"已进入计划模式"提示，工具栏变色（计划模式主题色） |
-| `EnterPlanModeTool` 被拒绝 | 显示"用户拒绝进入计划模式" |
-| `ExitPlanModeTool` 执行成功 | 显示计划内容（折叠框），标记"用户已批准计划" |
-| `ExitPlanModeTool` 被拒绝 | 显示计划内容，标记"用户已拒绝计划" |
+**ExitPlanModeTool 的副作用**：
+1. `context.options.permission_mode` 重置为 `PermissionMode.DEFAULT`
+2. `SessionManager` 检测 `result.data["event"] == "plan_created"`，写入 `plan_created` JSONL 事件
+3. UI 显示结构化计划，等待用户批准/拒绝
 
 ---
 
-## Plan Mode 的五阶段工作流
+## 多步任务如何落地执行
 
-对应 Kode-Agent `planMode.ts` 的 `buildPlanModeMainReminder()` 所描述的工作流：
+### 阶段边界
 
 ```
-Phase 1: 初步理解（Initial Understanding）
-    │  目标：理解用户请求和相关代码
-    │  工具：Explore 子 Agent（并行 1-3 个）
-    │  禁止：任何写操作
-    ▼
-Phase 2: 设计（Design）
-    │  目标：设计实现方案
-    │  工具：Plan 子 Agent（1-N 个）
-    │  输出：多个方案对比
-    ▼
-Phase 3: 评审（Review）
-    │  目标：与用户意图对齐
-    │  工具：AskUserQuestionTool（有疑问时）
-    │  输出：确定最终方案
-    ▼
-Phase 4: 撰写计划（Final Plan）
-    │  目标：将最终方案写入计划文件
-    │  文件：~/.pode/plans/{slug}.md
-    │  内容：步骤、关键文件、风险、验收标准
-    ▼
-Phase 5: 退出并等待批准（ExitPlanMode）
-    │  工具：ExitPlanModeTool
-    │  效果：用户审阅 → 批准或拒绝
-    ▼
-（批准后）开始执行计划（工具集恢复完整）
+╔═══════════════════════════════════╗
+║          计划阶段（PLAN Mode）     ║
+║  PermissionMode = PLAN            ║
+║  只读工具可用                      ║
+║  Agent：读文件 / grep / 分析       ║
+╚═══════════════════════════════════╝
+            │
+            │ ExitPlanModeTool 调用
+            │ 用户审批
+            │
+╔═══════════════════════════════════╗
+║         执行阶段（DEFAULT Mode）   ║
+║  PermissionMode = DEFAULT         ║
+║  全部工具可用（受正常权限控制）     ║
+║  Agent：按步骤写文件 / 执行命令    ║
+╚═══════════════════════════════════╝
 ```
 
-### 主 Agent vs 子 Agent 的行为差异
+### 用户批准后的执行流程
 
-| 角色 | 工作流 | 计划文件 |
-|------|--------|---------|
-| **主 Agent** | 5 阶段完整工作流，最终调用 ExitPlanMode | `~/.pode/plans/{slug}.md` |
-| **子 Agent（agentId 非空）** | 只做探索/分析，不调用 Enter/ExitPlanMode | `~/.pode/plans/{slug}-agent-{id}.md` |
+```python
+# 伪代码：SessionManager 处理计划审批
 
-子 Agent 的 system-reminder 是简化版（`buildPlanModeSubAgentReminder()`），  
-主要职责是回答主 Agent 的探索/设计问题，而非驱动整个计划流程。
+async def on_plan_approved(self, plan_id: str):
+    """用户点击"批准"后触发"""
+    
+    # 1. 写 plan_approved JSONL 事件
+    self.write_log(PlanApprovedEvent(plan_id=plan_id))
+    
+    # 2. 将计划注入到下一轮对话的上下文
+    plan = self.get_plan(plan_id)
+    plan_context = _build_plan_execution_context(plan)
+    
+    # 3. 发送给 Agent 一条"继续按计划执行"的系统消息
+    continuation_prompt = (
+        f"用户已批准计划（plan_id={plan_id}）。"
+        f"请按以下步骤顺序执行，每完成一步告知进度：\n"
+        f"{_format_steps(plan.steps)}"
+    )
+    
+    # 4. 触发新一轮 Agentic Loop（执行模式）
+    async for event in query(
+        prompt=continuation_prompt,
+        messages=self.messages,
+        tools=await get_enabled_tools(...),  # 完整工具集（执行模式）
+        session=self,
+        options=QueryOptions(permission_mode=PermissionMode.DEFAULT),
+    ):
+        yield event
+```
+
+### Agent 执行过程中的步骤追踪
+
+执行阶段，Agent 每完成一个步骤后，`SessionManager` 写入 `plan_step_done` 事件：
+
+```
+Agent 执行工具（FileEditTool / BashTool）
+    │
+    ▼
+Agent 输出文本："步骤 1 完成：已修改 auth.py"
+    │
+    ▼
+SessionManager 检测到 plan 关联消息
+    │
+    ▼
+写入 plan_step_done JSONL 事件
+    │
+    ▼
+UI 更新进度（步骤 1 标记为 ✓）
+```
+
+### 执行中断与恢复
+
+若 Agent 执行中途中断（网络错误、用户中止等），通过 JSONL 恢复：
+
+1. 重启时，`load_plan_from_log()` 找到 `status=executing` 的计划
+2. 读取已完成的 `plan_step_done` 事件，确认当前步骤进度
+3. 继续从上次中断的步骤开始执行
 
 ---
 
 ## 与 Agent Loop 的耦合点
 
-> 📖 **`query_core()` 的完整调用流程见** [agent-loop.md — 递归式主循环](./agent-loop.md#递归式主循环)。
+### System Prompt Additions 注入
 
-### System Prompt 注入点
-
-在 `query_core()` 的每轮 LLM 调用前，`build_system_prompt()` 会调用 `get_plan_mode_system_prompt_additions()`：
+在 `query_core()` 的 `build_system_prompt()` 阶段，会检查当前 `permission_mode`：
 
 ```python
-# pode_agent/app/query.py (伪代码)
+# pode_agent/services/system/system_prompt.py
 
-async def build_system_prompt(messages, context) -> str:
-    base = get_base_system_prompt()
+async def build_system_prompt(context, tools, options) -> str:
+    base = SYSTEM_PROMPT_BASE
+    
+    # ★ Plan Mode 附加提示（当 permission_mode == PLAN 时注入）
+    if options.permission_mode == PermissionMode.PLAN:
+        base += PLAN_MODE_SYSTEM_PROMPT_ADDITION
+    
+    # 其他动态部分...
+    return base
 
-    # Hook 追加（Phase 5 实现）
-    hook_additions = await run_user_prompt_submit_hooks(...)
-
-    # Plan Mode 追加（Phase 3 实现）
-    plan_additions = get_plan_mode_system_prompt_additions(messages, context)
-
-    # Tool prompt 追加
-    tool_additions = [
-        await tool.prompt()
-        for tool in context.options.tools or []
-        if await tool.prompt()
-    ]
-
-    return base + "\n".join(hook_additions + plan_additions + tool_additions)
+PLAN_MODE_SYSTEM_PROMPT_ADDITION = """
+<plan_mode>
+你正处于**计划模式**。在此模式下：
+1. 只允许使用只读工具（文件读取、搜索、grep 等）
+2. 不得修改任何文件或执行有副作用的命令
+3. 你的目标是充分探索代码库，然后调用 exit_plan_mode 工具，输出一份完整的执行计划
+4. 计划必须包含：目标、步骤（含工具建议）、验收标准、风险、回滚方案
+</plan_mode>
+"""
 ```
 
-### system-reminder 的注入频率
+> 📖 System Prompt 的完整构建逻辑详见 [agent-loop.md § System Prompt 动态组装](./agent-loop.md#system-prompt-动态组装)。
 
-为避免 system-reminder 占用过多 token，Kode-Agent（以及 Pode-Agent）仅在以下条件下注入：
+### PermissionMode 对 `can_use_tool` 的影响
 
-- 首次进入 Plan Mode 时：**无条件注入**
-- 后续轮次：距上次注入**超过 5 个 Assistant 轮次**才再次注入（`TURNS_BETWEEN_ATTACHMENTS = 5`）
-
-```python
-# pode_agent/app/plan_state.py
-
-TURNS_BETWEEN_ATTACHMENTS = 5
-
-def should_inject_plan_reminder(state: PlanModeAttachmentState, assistant_turns: int) -> bool:
-    if not state.has_injected:
-        return True  # 首次必须注入
-    return assistant_turns - state.last_injected_assistant_turn >= TURNS_BETWEEN_ATTACHMENTS
+```
+query_core() 递归调用
+    │
+    ├─ build_system_prompt() ← 检查 permission_mode == PLAN，注入提示
+    │
+    └─ ToolUseQueue.run(tool_use_block)
+            │
+            └─ check_permissions_and_call_tool()
+                    │
+                    └─ PermissionEngine.has_permissions()
+                            │
+                            ├─ permission_mode == PLAN 且 tool.is_read_only() == False
+                            │   → PermissionResult.DENIED（硬拒绝，不询问用户）
+                            │
+                            └─ 其他情况 → 正常权限流程
 ```
 
-### PermissionMode 的切换
+> 📖 权限检查的完整顺序详见 [tools-system.md § Plan Mode 硬拒绝](./tools-system.md#plan-mode-硬拒绝permission-mode-b-策略)。
+
+### permission_mode 的传播路径
 
 ```
 EnterPlanModeTool.call()
-    → set_permission_mode(context, PermissionMode.PLAN)
-    
-ExitPlanModeTool.call()
-    → set_permission_mode(context, PermissionMode.DEFAULT)
-    （或恢复到用户指定的默认模式）
+    └─ context.options.permission_mode = PermissionMode.PLAN
+            │
+            ▼
+query_core() 递归（携带更新后的 options）
+    │
+    ├─ build_system_prompt(options) ← 检测到 PLAN，注入提示
+    │
+    └─ check_permissions_and_call_tool(context)
+            └─ context.options.permission_mode == PLAN → 硬拒绝写工具
 ```
 
-`PermissionMode.PLAN` 在 `PermissionEngine.has_permissions()` 中的行为：
-
-```python
-def has_permissions(self, tool_name, input, context) -> PermissionResult:
-    mode = get_permission_mode(context)
-
-    if mode == PermissionMode.PLAN:
-        tool = registry.get(tool_name)
-        if tool and tool.is_read_only(input):
-            return PermissionResult.ALLOWED  # 只读工具直接允许
-        # 额外允许写计划文件
-        if is_plan_file_path(input.get("file_path", ""), context):
-            return PermissionResult.ALLOWED
-        return PermissionResult.DENIED  # 写操作全部拒绝
-
-    # ... 其他模式逻辑
-```
-
-### canUseTool 函数
-
-`canUseTool` 是 `query_core()` 的参数，用于在工具执行前做最终拦截：
-
-```python
-# 由 SessionManager 构造并传入 query()
-
-def can_use_tool(tool_name: str, input: dict, context: ToolUseContext) -> bool:
-    """
-    Plan Mode 下：只允许只读工具和计划文件写入
-    Safe Mode 下：只允许只读工具
-    """
-    permission_mode = get_permission_mode(context)
-    if permission_mode == PermissionMode.PLAN:
-        tool = registry.get(tool_name)
-        return (tool is not None and tool.is_read_only(input)) or \
-               is_plan_file_path_for_active_conversation(input.get("path", ""))
-    return True
-```
+`query_core()` 的每次递归都会透传同一个 `context.options` 对象，所以 `EnterPlanModeTool` 修改后立即在后续所有轮次生效，无需额外传参。
 
 ---
 
-## System Prompt 动态注入
+## 与 SubAgent / TaskTool 的关系
 
-### Plan Mode 激活时注入的 system-reminder 内容
+### 当前范围（Phase 3）
 
-对应 Kode-Agent 的 `buildPlanModeMainReminder()`，注入内容结构如下：
+Phase 3 实现的 Plan Mode 是**单 Agent 模式**：
+- 计划由主 Agent 生成
+- 执行也由主 Agent 按步骤推进
+- 不涉及子 Agent 并行执行
 
-```
-<system-reminder>
-Plan mode is active. The user indicated that they do not want you to execute yet
--- you MUST NOT make any edits (with the exception of the plan file mentioned
-below), run any non-readonly tools, or otherwise make any changes to the system.
-This supercedes any other instructions you have received.
+### TaskTool（Phase 5+）
 
-## Plan File Info:
-[No plan file exists yet / A plan file already exists at {path}]
-You should build your plan incrementally by writing to or editing this file.
-NOTE that this is the only file you are allowed to edit.
-
-## Plan Workflow
-### Phase 1: Initial Understanding
-...
-### Phase 2: Design
-...
-### Phase 3: Review
-...
-### Phase 4: Final Plan
-...
-### Phase 5: Call ExitPlanMode
-...
-</system-reminder>
-```
-
-### Plan Mode 退出时注入的 system-reminder
+`TaskTool` 是 Kode-Agent 中支持"子任务 Agent"的工具，允许将计划的某个步骤委托给独立的子 Agent 执行：
 
 ```
-<system-reminder>
-## Exited Plan Mode
-
-You have exited plan mode. You can now make edits, run tools, and take actions.
-The plan file is located at {file_path} if you need to reference it.
-</system-reminder>
+主 Agent（计划模式）
+    │
+    ├── 步骤 1：探索代码库（FileReadTool）
+    ├── 步骤 2：TaskTool(subtask="重构 auth.py")
+    │       └── 子 Agent（独立 Agent Loop）
+    │               ├── FileEditTool
+    │               └── BashTool（运行测试）
+    └── 步骤 3：验证结果（BashTool）
 ```
 
-### 重新进入 Plan Mode（Re-entry）
-
-当用户在批准计划后再次触发 Plan Mode 时，额外注入"re-entry reminder"：
-
-```
-<system-reminder>
-## Re-entering Plan Mode
-
-You are returning to plan mode after having previously exited it.
-A plan file exists at {file_path} from your previous planning session.
-
-**Before proceeding with any new planning, you should:**
-1. Read the existing plan file to understand what was previously planned
-2. Evaluate the user's current request against that plan
-3. Decide how to proceed: Different task（覆盖）vs Same task（修改）
-4. Always edit the plan file before calling ExitPlanMode
-...
-</system-reminder>
-```
-
----
-
-## 权限系统与 Plan Mode
-
-> 📖 **权限系统完整规格见** [tools-system.md — 权限系统与工具系统的耦合点](./tools-system.md#权限系统与工具系统的耦合点)。
-
-### 权限模式对比
-
-| PermissionMode | 写文件 | 执行 Shell | Plan 文件 | 说明 |
-|---------------|-------|-----------|----------|------|
-| `DEFAULT` | 需确认 | 需确认 | 需确认 | 正常模式 |
-| `PLAN` | **拒绝** | **拒绝** | **允许** | 计划模式 |
-| `ACCEPT_EDITS` | 自动允许 | 需确认 | 自动允许 | 文件编辑免确认 |
-| `BYPASS_PERMISSIONS` | 自动允许 | 自动允许 | 自动允许 | 跳过所有检查 |
-| `DONT_ASK` | 拒绝危险 | 拒绝危险 | 拒绝危险 | 保守模式 |
-
-### Plan Mode 下的工具可用性
-
-```python
-# Plan Mode 下可用的工具（is_read_only == True）
-PLAN_MODE_AVAILABLE_TOOLS = [
-    "GlobTool",
-    "GrepTool",
-    "FileReadTool",
-    "LsTool",
-    "LspTool",
-    "WebSearchTool",    # 只读（搜索）
-    "WebFetchTool",     # 只读（抓取）
-    "AskUserQuestionTool",  # 交互，但不写文件
-    "TaskTool",         # 子 Agent（Explore 类型）
-    # EnterPlanModeTool / ExitPlanModeTool 由框架特殊处理
-]
-
-# Plan Mode 下禁止的工具（is_read_only == False）
-PLAN_MODE_BLOCKED_TOOLS = [
-    "BashTool",         # 可能执行写操作
-    "FileWriteTool",
-    "FileEditTool",
-    "MultiEditTool",
-    "NotebookEditTool",
-    "TodoWriteTool",
-    # MCP 工具默认全部禁止
-]
-```
-
----
-
-## 多步任务的落地方式
-
-### 计划文件建议格式
-
-为了让 Agent 在实现阶段能有效参考计划，推荐计划文件包含以下结构：
-
-```markdown
-# 计划：{简洁任务描述}
-
-## 目标
-{1-2句话描述最终目标}
-
-## 背景信息
-- 相关代码位置：`path/to/relevant/file.py`（L42-L89）
-- 现有模式：{描述当前如何实现类似功能}
-- 约束：{已知限制}
-
-## 实现步骤
-1. **{步骤标题}**（预计影响文件：`a.py`, `b.py`）
-   - 具体操作描述
-   - 注意事项
-
-2. **{步骤标题}**
-   - ...
-
-## 验收标准
-- [ ] {可测试的条件 1}
-- [ ] {可测试的条件 2}
-
-## 风险与回滚
-- 风险：{描述}
-  回滚方案：{描述}
-```
-
-### 用户批准后的执行方式
-
-`ExitPlanModeTool` 调用成功（用户批准）后，`renderResultForAssistant` 中注入：
-
-1. **计划文件路径**：Agent 在实现时可随时读取参考。
-2. **完整计划内容**：直接嵌入 `tool_result` 消息，Agent 无需再读文件。
-3. **执行提示**：`"You can now start coding. Start with updating your todo list if applicable"`。
-
-Agent 通常会先用 `TodoWriteTool` 将计划步骤转化为 TODO 列表，然后按步骤逐一实现。
-
----
-
-## 与 TaskTool/子 Agent 的关系
-
-### TaskTool 在 Plan Mode 中的角色
-
-`TaskTool` 可以在 Plan Mode 内启动子 Agent 进行并行探索/设计：
-
-| 子 Agent 类型 | 在 Plan Mode 中的用途 |
-|-------------|---------------------|
-| `explore` | Phase 1：并行探索代码库的不同区域（最多 `KODE_PLAN_V2_EXPLORE_AGENT_COUNT` 个，默认 3） |
-| `plan` | Phase 2：并行设计多个方案视角（最多 `KODE_PLAN_V2_AGENT_COUNT` 个，默认 1） |
-
-子 Agent 在 Plan Mode 下自动继承 `PLAN` 权限模式，但收到简化版 system-reminder。
-
-### 子 Agent 与计划文件
-
-- 子 Agent 有自己独立的计划文件（`{slug}-agent-{id}.md`）。
-- 主 Agent 读取子 Agent 的探索/设计结果后，整合到主计划文件（`{slug}.md`）。
-- 只有主 Agent 可以调用 `ExitPlanModeTool`。
-
-### Swarm 模式（高级用法）
-
-当用户在批准计划时选择 "Launch Swarm" 时，`ExitPlanModeTool` 的 `renderResultForAssistant` 中注入指令，引导主 Agent 用 `TaskTool` 创建多个并行 worker，分批实现计划步骤。
-
-**Pode-Agent 实现阶段**：Swarm 模式在 Phase 6 实现（依赖完整的 TaskTool + 子 Agent 通信）。
-
----
-
-## Kode-Agent → Pode-Agent 映射表
-
-| Kode-Agent（TypeScript） | Pode-Agent（Python） | 说明 |
-|--------------------------|----------------------|------|
-| `src/utils/plan/planMode.ts` | `pode_agent/app/plan_state.py` | Plan Mode 核心状态机 |
-| `src/utils/plan/planSlugWords.ts` | `pode_agent/app/plan_slug_words.py` | 随机 slug 词库 |
-| `enterPlanMode()` | `enter_plan_mode(context)` | 激活 Plan Mode |
-| `exitPlanMode()` | `exit_plan_mode(context)` | 停用 Plan Mode |
-| `isPlanModeEnabled()` | `is_plan_mode_enabled(context)` | 查询 Plan Mode 状态 |
-| `getPlanFilePath()` | `get_plan_file_path(context)` | 计划文件路径 |
-| `readPlanFile()` | `read_plan_file(context)` | 读取计划文件 |
-| `getPlanModeSystemPromptAdditions()` | `get_plan_mode_system_prompt_additions(messages, context)` | System Prompt 追加 |
-| `buildPlanModeMainReminder()` | `build_plan_mode_main_reminder(...)` | 主 Agent reminder |
-| `buildPlanModeSubAgentReminder()` | `build_plan_mode_sub_agent_reminder(...)` | 子 Agent reminder |
-| `buildPlanModeReentryReminder()` | `build_plan_mode_reentry_reminder(...)` | 重入 reminder |
-| `buildPlanModeExitReminder()` | `build_plan_mode_exit_reminder(...)` | 退出 reminder |
-| `src/utils/permissions/permissionModeState.ts` `setPermissionMode()` | `pode_agent/core/permissions/engine.py` `set_permission_mode()` | 切换权限模式 |
-| `TURNS_BETWEEN_ATTACHMENTS = 5` | `TURNS_BETWEEN_ATTACHMENTS = 5` | Reminder 注入间隔 |
-| `MAX_SLUG_ATTEMPTS = 10` | `MAX_SLUG_ATTEMPTS = 10` | Slug 生成最大重试 |
-| `src/tools/agent/PlanModeTool/EnterPlanModeTool.tsx` | `pode_agent/tools/agent/plan_mode.py` `EnterPlanModeTool` | 进入计划模式工具 |
-| `src/tools/agent/PlanModeTool/ExitPlanModeTool.tsx` | `pode_agent/tools/agent/plan_mode.py` `ExitPlanModeTool` | 退出计划模式工具 |
-| `KODE_PLAN_V2_EXPLORE_AGENT_COUNT` | `PODE_PLAN_EXPLORE_AGENT_COUNT` | 最大探索子 Agent 数 |
-| `KODE_PLAN_V2_AGENT_COUNT` | `PODE_PLAN_DESIGN_AGENT_COUNT` | 最大设计子 Agent 数 |
+**注意**：`TaskTool` 在 Phase 5 实现，与 MCP 和插件系统同期。Plan Mode 的核心（Phase 3）不依赖 `TaskTool`。
 
 ---
 
 ## 分阶段实现建议
 
-| 功能组件 | 实现阶段 | 说明 |
-|---------|---------|------|
-| `PermissionMode.PLAN` 权限模式骨架 | **Phase 1** | 权限系统任务 1.1，仅定义 enum，不完整实现 |
-| `plan_state.py`：`enter/exit/is_enabled` + Slug 生成 | **Phase 3** | 配合 Plan Mode 工具一起实现 |
-| `EnterPlanModeTool` / `ExitPlanModeTool` | **Phase 3** | 低优先级工具，任务 3.x |
-| `PermissionEngine` Plan Mode 约束（只读工具允许，写操作拒绝） | **Phase 3** | 配合工具实现 |
-| System Prompt 注入（`get_plan_mode_system_prompt_additions`） | **Phase 3** | 配合 System Prompt 动态组装 |
-| `canUseTool` Plan Mode 拦截 | **Phase 3** | 配合 query_core 升级 |
-| `TURNS_BETWEEN_ATTACHMENTS` 节流逻辑 | **Phase 3** | 避免 reminder 占用过多 token |
-| 计划文件 Re-entry 逻辑（`buildPlanModeReentryReminder`） | **Phase 3** | 与主流程一起实现 |
-| TaskTool Explore/Plan 子 Agent 类型 | **Phase 5** | 依赖完整 TaskTool + MCP |
-| Swarm 模式（并行 worker） | **Phase 6** | 依赖完整子 Agent 通信机制 |
+| 子功能 | 实现阶段 | 说明 |
+|--------|---------|------|
+| `PermissionMode.PLAN` 枚举值 | Phase 1（✅ 权限系统框架） | 权限引擎框架中已定义 |
+| Plan Mode 硬拒绝规则（`permission_mode == PLAN → DENIED`） | Phase 1（✅ 权限系统框架） | `PermissionEngine` 的规则步骤 5 |
+| `Plan` / `PlanStep` Pydantic 数据模型 | Phase 3 | 与 EnterPlanModeTool 一同实现 |
+| Plan JSONL 事件类型（`plan_created` 等） | Phase 3 | 扩展 `SessionEvent` |
+| `EnterPlanModeTool` | Phase 3 | 切换 permission_mode + 返回提示 |
+| `ExitPlanModeTool` | Phase 3 | 输出 Plan 对象 + 重置 permission_mode |
+| Plan Mode System Prompt Additions | Phase 3 | `build_system_prompt()` 中注入 |
+| `load_plan_from_log()` 会话恢复 | Phase 3 | JSONL replay |
+| UI 计划显示（结构化渲染） | Phase 4 | Textual Widget 展示 PlanStep 列表 |
+| UI 审批/拒绝交互 | Phase 4 | 审批按钮 + 拒绝原因输入 |
+| 执行进度追踪（`plan_step_done` 事件） | Phase 4 | 配合 UI 进度显示 |
+| `TaskTool`（子 Agent 执行） | Phase 5 | 依赖 MCP 架构 |
+| 计划模板（预设结构化提示） | Phase 6 | 优化 Agent 计划质量 |
+
+---
+
+## 映射表：Kode-Agent → Pode-Agent
+
+| Kode-Agent（TypeScript）概念 | Pode-Agent（Python）计划模块/文件 |
+|-----------------------------|----------------------------------|
+| `EnterPlanMode` 工具（`src/tools/...`） | `pode_agent/tools/agent/plan_mode.EnterPlanModeTool` |
+| `ExitPlanMode` 工具 | `pode_agent/tools/agent/plan_mode.ExitPlanModeTool` |
+| `permissionMode: 'plan'` | `PermissionMode.PLAN`（`pode_agent/core/permissions/engine.py`） |
+| Plan mode system prompt additions | `PLAN_MODE_SYSTEM_PROMPT_ADDITION`（`pode_agent/services/system/system_prompt.py`） |
+| `isConcurrencySafe` / `isReadOnly` 对工具的影响 | `Tool.is_read_only()` + `PermissionEngine` 硬拒绝 |
+| 计划存储（session log） | Session JSONL 事件（`plan_created` / `plan_step_done` 等） |
+| `taskTool`（子任务 Agent） | `pode_agent/tools/agent/task.TaskTool`（Phase 5） |
+| `permissionMode` 传播路径 | `ToolUseContext.options.permission_mode`（透传到每次递归） |
+| 计划审批 UI | `pode_agent/ui/widgets/plan_approval.py`（Phase 4） |

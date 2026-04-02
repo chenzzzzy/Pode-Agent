@@ -334,8 +334,8 @@ PLAN_MODE_ALLOWED_TOOLS: frozenset[str] = frozenset([
 
 **模块**：`pode_agent.core.tools`
 
-> 📖 **工具系统完整规格**（目录结构、注册/发现、get_tools()、Schema 转换、权限耦合、并发语义）详见 [tools-system.md](./tools-system.md)。  
-> **Plan Mode 工具**（EnterPlanModeTool / ExitPlanModeTool）及 Plan State API 详见 [plan-mode.md](./plan-mode.md)。
+> 📖 **工具系统完整设计**（ToolRegistry/ToolLoader/`get_enabled_tools()`、工具注入 Agent Loop、Pydantic JSON Schema → Provider tools schema、权限耦合、并发语义）详见 [tools-system.md](./tools-system.md)。  
+> 本节展示核心数据类型和接口契约；工具的目录组织和各域工具清单见该文档。
 
 ```python
 # === 数据类型（可参考 modules.md 中的完整定义）===
@@ -893,9 +893,8 @@ async def build_system_prompt(
 **模块**：`pode_agent.app.session`
 
 > 📖 **`SessionManager.process_input()` 所调用的核心 Agentic Loop 设计规格详见** [agent-loop.md](./agent-loop.md)。  
-> **工具注入到会话的流程**（get_tools → filter_tools_by_config → SessionManager）详见 [tools-system.md — 工具注入到 Agentic Loop](./tools-system.md#工具注入到-agentic-loop)。  
-> **Plan Mode 在会话中的激活/退出**（EnterPlanModeTool → set_permission_mode(PLAN)）详见 [plan-mode.md](./plan-mode.md)。  
-> 本节仅描述 Session API 的类型契约；循环引擎的递归结构、`ToolUseQueue`、Hook 系统请参阅该文档。
+> 📖 **Plan Mode 的 JSONL 事件类型（`plan_created`/`plan_approved`/`plan_step_done` 等）和 Session 恢复详见** [plan-mode.md § 存储方案 A](./plan-mode.md#存储方案-a写入-session-jsonl)。  
+> 本节仅描述 Session API 的类型契约；循环引擎的递归结构、`ToolUseQueue`、Hook 系统请参阅 agent-loop.md。
 
 ```python
 # === 事件类型（Session → UI）===
@@ -910,6 +909,13 @@ class SessionEventType(str, Enum):
     COST_UPDATE = "cost_update"
     MODEL_ERROR = "model_error"
     DONE = "done"
+    # Plan Mode 事件（Phase 3+，详见 plan-mode.md）
+    PLAN_CREATED = "plan_created"         # ExitPlanModeTool 返回计划
+    PLAN_APPROVED = "plan_approved"       # 用户批准计划
+    PLAN_STEP_START = "plan_step_start"   # 步骤开始执行
+    PLAN_STEP_DONE = "plan_step_done"     # 步骤完成
+    PLAN_DONE = "plan_done"               # 所有步骤完成
+    PLAN_CANCELLED = "plan_cancelled"     # 计划取消
 
 class SessionEvent(BaseModel):
     type: SessionEventType

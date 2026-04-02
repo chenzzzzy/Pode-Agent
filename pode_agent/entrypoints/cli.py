@@ -1,13 +1,15 @@
 """CLI entrypoint: ``pode`` command.
 
 Provides the main Typer application with ``--version``, ``--help``,
-and a ``config`` subcommand group.
+print mode (positional prompt), and a ``config`` subcommand group.
 
 Reference: docs/modules.md — Entrypoints layer
            docs/api-specs.md — CLI usage
 """
 
 from __future__ import annotations
+
+import asyncio
 
 import typer
 
@@ -36,6 +38,10 @@ def _version_callback(value: bool) -> None:
 @app.callback(invoke_without_command=True)
 def main(
     ctx: typer.Context,
+    prompt: str | None = typer.Argument(
+        None,
+        help="Prompt for single-query print mode.",
+    ),
     version: bool = typer.Option(
         False,
         "--version",
@@ -44,16 +50,57 @@ def main(
         callback=_version_callback,
         is_eager=True,
     ),
+    model: str = typer.Option(
+        "claude-sonnet-4-5-20251101",
+        "--model",
+        "-m",
+        help="Model to use for print mode.",
+    ),
+    output_format: str = typer.Option(
+        "text",
+        "--output-format",
+        "-f",
+        help="Output format: text or json.",
+    ),
+    verbose: bool = typer.Option(
+        False,
+        "--verbose",
+        help="Show verbose output including tool errors.",
+    ),
+    safe_mode: bool = typer.Option(
+        False,
+        "--safe",
+        help="Enable safe mode (restricts dangerous operations).",
+    ),
 ) -> None:
     """Pode-Agent: AI-powered terminal coding assistant.
 
     Run without arguments to start the interactive REPL (Phase 4).
-    Pass a prompt string for single-query print mode (Phase 2).
+    Pass a prompt string for single-query print mode.
     """
     if ctx.invoked_subcommand is not None:
         return
+
+    if prompt:
+        # Print mode: run single query
+        from pode_agent.app.print_mode import PrintModeOptions, run_print_mode
+        from pode_agent.core.tools.registry import ToolRegistry
+
+        # Collect available tools
+        registry = ToolRegistry()
+        tools = registry.tools
+
+        opts = PrintModeOptions(
+            model=model,
+            output_format=output_format,
+            verbose=verbose,
+            safe_mode=safe_mode,
+        )
+
+        exit_code = asyncio.run(run_print_mode(prompt, tools, opts))
+        raise typer.Exit(code=exit_code)
+
     # Phase 4 will add REPL launch here
-    # Phase 2 will add print mode here
     typer.echo("Interactive REPL not yet implemented. Use 'pode --help'.")
 
 

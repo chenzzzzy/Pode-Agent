@@ -150,8 +150,8 @@ class McpServerConfig(BaseModel):
 
 **职责**：判断工具是否有权限执行，管理权限存储，定义各工具的安全规则。
 
-> 📖 **权限系统与工具系统的完整耦合关系**（needsPermissions、PermissionMode、批量权限）详见 [tools-system.md — 权限系统与工具系统的耦合点](./tools-system.md#权限系统与工具系统的耦合点)。  
-> **Plan Mode 对 PermissionMode 的切换逻辑**详见 [plan-mode.md — 权限系统与 Plan Mode](./plan-mode.md#权限系统与-plan-mode)。
+> 📖 **权限系统与工具的耦合点**（plan mode 硬拒绝、safe_mode 过滤、Hook 对输入的影响）详见 [tools-system.md § 权限系统与工具的耦合点](./tools-system.md#权限系统与工具的耦合点)。  
+> 📖 **Plan Mode 中 PermissionMode 的传播路径**详见 [plan-mode.md § 与 Agent Loop 的耦合点](./plan-mode.md#与-agent-loop-的耦合点)。
 
 **文件结构**：
 ```
@@ -245,8 +245,8 @@ def is_safe_bash_command(command: str) -> bool:
 
 **职责**：定义工具系统的抽象基类、数据类型和工具注册表。
 
-> 📖 **工具系统完整规格**（目录结构、注册/发现、Schema 转换、权限耦合）详见 [tools-system.md](./tools-system.md)。  
-> **Plan Mode 对工具集的约束**（只读工具允许、写操作拒绝）详见 [plan-mode.md — 权限系统与 Plan Mode](./plan-mode.md#权限系统与-plan-mode)。
+> 📖 **工具系统完整设计**（存储组织、ToolRegistry/ToolLoader、get_enabled_tools、与 LLM 的连接、权限耦合、并发语义、MCP/插件边界）详见 [tools-system.md](./tools-system.md)。  
+> 本节仅展示 `core/tools/` 下的接口定义；工具具体实现在 `pode_agent/tools/` 中。
 
 **文件结构**：
 ```
@@ -681,7 +681,7 @@ async def build_system_prompt(
 
 ## Tools 层模块
 
-> 📖 **工具系统完整规格**（目录结构、注册/发现、Schema 转换、权限耦合、并发语义）详见 [tools-system.md](./tools-system.md)。
+> 📖 **工具系统完整设计**（目录结构、ToolRegistry/ToolLoader、`get_enabled_tools()`、与 LLM 的连接、权限耦合、并发语义、MCP/插件边界、映射表）详见 [tools-system.md](./tools-system.md)。
 
 每个 Tool 文件遵循统一结构：
 
@@ -823,6 +823,7 @@ def get_all_tools() -> list[Tool]:
 **职责**：单次对话的完整生命周期管理，包括消息历史、工具调用编排、日志持久化。
 
 > 📖 **`process_input()` 内部调用的核心 Agentic Loop（递归主循环、`ToolUseQueue`、Hook 系统、Auto-compact）详见** [agent-loop.md](./agent-loop.md)。  
+> 📖 **计划模式的 JSONL 事件写入（`plan_created`/`plan_approved` 等）详见** [plan-mode.md § 存储方案 A](./plan-mode.md#存储方案-a写入-session-jsonl)。  
 > `session.py` 负责会话状态和 JSONL 持久化；循环引擎本身位于 `app/query.py`。
 
 ```python

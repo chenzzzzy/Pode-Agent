@@ -200,8 +200,9 @@ pode_agent/
     └── print_mode.py       # 非交互模式逻辑
 ```
 
-> 📖 **核心引擎详见**：[agent-loop.md](./agent-loop.md) — 详细描述了 `query_core()` 递归主循环、`ToolUseQueue` 并发工具调度器、Hook 系统、Auto-compact、Stop Hook 重入等运行时行为。
-> 📖 **Plan Mode 状态管理**（`plan_state.py`）也位于应用层，详见 [plan-mode.md](./plan-mode.md)。
+> 📖 **核心引擎详见**：[agent-loop.md](./agent-loop.md) — 详细描述了 `query_core()` 递归主循环、`ToolUseQueue` 并发工具调度器、Hook 系统、Auto-compact、Stop Hook 重入等运行时行为。  
+> 📖 **工具系统详见**：[tools-system.md](./tools-system.md) — 工具的存储组织、注册/发现/启用过滤、与 LLM 的连接（ToolDefinition/tool_result）、权限耦合（Plan Mode 硬拒绝）、并发语义（is_concurrency_safe）。  
+> 📖 **计划模式详见**：[plan-mode.md](./plan-mode.md) — Plan Mode 目标原则、Plan 数据结构、JSONL 存储方案、Enter/Exit 工具、多步执行流程、与 Agent Loop 的耦合点。
 
 ---
 
