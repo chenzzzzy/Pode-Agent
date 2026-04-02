@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Pode-Agent is a Python (>=3.11) 1:1 rewrite of [Kode-Agent](https://github.com/chenzzzzy/Kode-Agent) (TypeScript). It is an AI-powered terminal coding assistant supporting 15+ LLM providers, 25+ tools, MCP protocol, and a React + Ink v5 terminal UI (deep 1:1 replication of Kode-Agent's UI layer).
 
-**Current status**: Planning phase — only design docs exist in `docs/`. No source code yet.
+**Current status**: Phase 0-4 completed (638 tests passing). Phase 5 (MCP & Plugins) in progress.
 
 ## Architecture
 
@@ -107,3 +107,6 @@ All in `docs/`:
 - `data-flows.md` — Data flow diagrams and sequence diagrams
 - `api-specs.md` — Internal API contracts (Python type signatures)
 - `testing-strategy.md` — Test tiers, naming conventions, fixtures, CI config
+- `plan-mode.md` — Plan Mode design (enter/exit tools, JSONL storage, execution flow)
+- `skill-system.md` — Skill System design (discovery, YAML frontmatter, Marketplace, contextModifier)
+- `subagent-system.md` — SubAgent system design (TaskTool, agent configs, context isolation, transcripts)

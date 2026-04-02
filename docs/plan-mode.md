@@ -50,7 +50,7 @@
 ### Plan 标识
 
 ```python
-# pode_agent/app/plan.py（或 pode_agent/types/plan.py）
+# pode_agent/types/plan.py
 
 import uuid
 from pydantic import BaseModel, Field

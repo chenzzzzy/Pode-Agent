@@ -306,7 +306,7 @@ def get_all_tools() -> list[Tool]:
 每次启动 Agent Loop 之前，必须通过 `get_enabled_tools()` 过滤出**本次对话可用的工具列表**：
 
 ```python
-# pode_agent/core/tools/registry.py（或 loader.py）
+# pode_agent/core/tools/registry.py
 
 async def get_enabled_tools(
     registry: ToolRegistry,
@@ -324,7 +324,7 @@ async def get_enabled_tools(
     3. command_allowed_tools 非空 → 只保留白名单中的工具
     4. permission_mode=PLAN → 只保留 is_read_only() 为 True 的工具
        （写工具会在权限层被硬拒绝，但也可在此预过滤以减少 LLM 混淆）
-    5. GlobalConfig.denied_tools → 排除已永久拒绝的工具
+    5. project_config.denied_tools → 排除已永久拒绝的工具
     
     Returns:
         过滤后的 Tool 实例列表（用于构建 LLM tools 参数）
@@ -648,3 +648,5 @@ my_tool = "my_package.tools:MyTool"
 | `src/tools/index.ts`（工具总清单） | `pode_agent/tools/__init__.py: get_all_tools()` |
 
 > 📖 **SubAgent 工具完整设计**：[subagent-system.md](./subagent-system.md) — TaskTool 的输入/输出 Schema、前台/后台执行流程、Agent 配置加载、上下文隔离（ForkContext）、工具权限三层过滤、模型选择优先级、后台任务管理、Transcript 存储。
+
+> 📖 **SkillTool / SlashCommandTool 完整设计**：[skill-system.md](./skill-system.md) — 技能发现、YAML frontmatter、contextModifier、Marketplace、Plugin 架构。

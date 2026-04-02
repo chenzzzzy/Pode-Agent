@@ -373,7 +373,7 @@ uv run pytest tests/ -v        # 198 passed, 1 skipped
 | 子功能 | 文件 | 说明 |
 |--------|------|------|
 | `ToolDefinition` 数据类型 | `services/ai/base.py` | 传给 LLM 的工具定义结构 |
-| `tool_to_definition()` 转换函数 | `core/tools/base.py` 或 `services/ai/` | Pydantic JSON Schema → ToolDefinition |
+| `tool_to_definition()` 转换函数 | `core/tools/base.py` | Pydantic JSON Schema → ToolDefinition |
 | Anthropic 适配器工具格式转换 | `services/ai/anthropic.py` | ToolDefinition → `anthropic.types.ToolParam` |
 | OpenAI 适配器工具格式转换 | `services/ai/openai.py` | ToolDefinition → `openai.types.ChatCompletionToolParam` |
 
@@ -613,7 +613,7 @@ uv run pytest tests/ -q --ignore=tests/integration  # 623 passed, 4 skipped
 
 **实际交付物**：
 - 80 个 Python 源文件（pode_agent/），新增 22 个
-- 15 个新工具实现：MultiEditTool, NotebookReadTool, NotebookEditTool, AskUserQuestionTool, TodoWriteTool, WebFetchTool, WebSearchTool, LspTool, KillShellTool, TaskOutputTool, EnterPlanModeTool, ExitPlanModeTool, AskExpertModelTool, SkillTool, TaskTool, SlashCommandTool
+- 16 个新工具实现：MultiEditTool, NotebookReadTool, NotebookEditTool, AskUserQuestionTool, TodoWriteTool, WebFetchTool, WebSearchTool, LspTool, KillShellTool, TaskOutputTool, EnterPlanModeTool, ExitPlanModeTool, AskExpertModelTool, SkillTool, TaskTool, SlashCommandTool
 - Plan Mode 数据模型：Plan, PlanStep, PlanStatus, StepStatus
 - Plan Mode 事件类型：PLAN_CREATED, PLAN_APPROVED, PLAN_STEP_START, PLAN_STEP_DONE, PLAN_DONE, PLAN_CANCELLED
 - ToolLoader + get_enabled_tools() 过滤框架
@@ -848,6 +848,19 @@ uv run pytest tests/ -q        # 638 passed, 4 skipped
 |--------|------|
 | `TaskTool`（子任务 Agent） | 支持将计划步骤委托给独立子 Agent 执行。完整设计见 [subagent-system.md](./subagent-system.md) |
 
+**Phase 5 Skill System 子块**（对应 [skill-system.md](./skill-system.md)）：
+
+| 子功能 | 文件 | 说明 |
+|--------|------|------|
+| `CustomCommandFrontmatter` 数据模型 | `types/skill.py` | Pydantic 数据结构定义 |
+| `load_custom_commands()` 发现与加载 | `services/plugins/commands.py` | 8 目录扫描 + 去重 |
+| Plugin 运行时 | `services/plugins/runtime.py` | plugin.json 解析与加载 |
+| Marketplace CRUD | `services/plugins/marketplace.py` | 安装/卸载/启用/禁用 |
+| Plugin 验证 | `services/plugins/validation.py` | schema 和路径校验 |
+| contextModifier 机制 | `core/tools/base.py` + `app/query.py` | ToolOutput 新字段 + 应用 |
+| SkillTool 完整实现 | `tools/ai/skill.py` | 替换 Phase 3 骨架 |
+| SlashCommandTool 完整实现 | `tools/interaction/slash_command.py` | 自定义命令支持 |
+
 ### 任务列表
 
 #### 任务 5.1：MCP 客户端（Week 14）
@@ -887,6 +900,8 @@ uv run pytest tests/ -q        # 638 passed, 4 skipped
 
 **文件**：`pode_agent/services/plugins/marketplace.py`
 
+> 📖 **Skill Marketplace 完整设计**：[skill-system.md](./skill-system.md) — Marketplace 来源、安装模式、CRUD 操作、Plugin 验证。
+
 **功能**：
 - 从 GitHub 安装 Skill（`Pode skill install github:owner/repo`）
 - 从本地目录安装
@@ -899,6 +914,8 @@ uv run pytest tests/ -q        # 638 passed, 4 skipped
 #### 任务 5.4：自定义命令（Week 16，Day 1-2）
 
 **文件**：`pode_agent/services/plugins/commands.py`
+
+> 📖 **自定义命令完整设计**：[skill-system.md](./skill-system.md) — 8 目录发现、YAML frontmatter 解析、$ARGUMENTS 替换、字符预算。
 
 **功能**：
 - 从 `~/.Pode/commands/` 加载 YAML/MD 自定义命令

@@ -102,6 +102,7 @@
 | [API 规范](./docs/api-specs.md)     | 模块间内部 API 契约 | 开发者 |
 | [测试策略](./docs/testing-strategy.md) | 单元/集成/E2E 测试方案 | QA、开发者 |
 | [SubAgent 系统](./docs/subagent-system.md) | **SubAgent 权威文档**：TaskTool、Agent 配置加载、ForkContext、前台/后台执行、工具权限隔离 | 开发者 |
+| [Skill 系统](./docs/skill-system.md) | **Skill System 权威文档**：技能发现、自定义命令、YAML Frontmatter、Marketplace、contextModifier、Plugin 架构 | 开发者 |
 
 ---
 

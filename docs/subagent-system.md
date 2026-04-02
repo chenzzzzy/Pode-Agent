@@ -438,6 +438,11 @@ permissionMode: default
 forkContext: true
 ---
 
+# YAML 中使用 camelCase（Kode-Agent 兼容），Pydantic 通过 alias 映射：
+# disallowedTools → Field(alias="disallowedTools")
+# permissionMode → Field(alias="permissionMode")
+# forkContext → Field(alias="forkContext")
+
 你是一个代码审查专家。你的任务是审查代码变更并提供反馈。
 只关注以下方面：
 - 代码质量
@@ -906,8 +911,7 @@ class SessionEventType(str, Enum):
 ### 事件结构
 
 ```python
-@dataclass
-class SubAgentEventData:
+class SubAgentEventData(BaseModel):
     agent_id: str
     subagent_type: str
     description: str

@@ -93,7 +93,7 @@ class GlobalConfig(BaseModel):
     has_completed_onboarding: bool = False
     last_onboarding_version: str | None = None
     last_release_notes_seen: str | None = None
-    default_model_name: str = "claude-sonnet-4-5-20251101"
+    default_model_name: str = "claude-3-5-sonnet-20241022"
     max_tokens: int | None = None
     auto_compact_threshold: int = 50       # 消息数超过此值时自动压缩
     primary_provider: ProviderType | None = None
@@ -407,25 +407,28 @@ class Tool(ABC):
     ) -> AsyncGenerator[ToolOutput, None]: ...
 
     def get_json_schema(self) -> dict[str, Any]:
-        """生成 JSON Schema（LLM tool calling 用）"""
-        schema = self.input_schema().model_json_schema()
-        return {
-            "name": self.name,
-            "description": self.description or "",
-            "input_schema": schema,
-        }
+        """生成 JSON Schema（直接调用 Pydantic model_json_schema()）"""
+        return self.input_schema().model_json_schema()
 
 # === Registry ===
 
 class ToolRegistry:
-    """工具注册表，存储所有可用工具"""
-    
-    def __init__(self, tools: list[Tool]): ...
-    
-    def get_tool_by_name(self, name: str) -> Tool | None: ...
-    
-    @property
-    def tools(self) -> list[Tool]: ...
+    """
+    单例注册表，保存所有已知工具（内置 + 插件 + MCP 包装）。
+    程序启动时由 ToolLoader 填充，运行期间只读。
+    """
+
+    def register(self, tool: Tool, aliases: list[str] | None = None) -> None:
+        """注册工具。name 重复时抛出 ToolRegistryError。"""
+
+    def get(self, name: str) -> Tool | None:
+        """按名称或别名查找工具。"""
+
+    def all(self) -> list[Tool]:
+        """返回所有已注册工具（不含别名重复项）。"""
+
+    def names(self) -> list[str]:
+        """返回所有工具名（含别名）。"""
 
 # === Executor ===
 

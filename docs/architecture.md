@@ -126,10 +126,11 @@ pode_agent/
     ├── auth/               # 认证
     │   └── oauth.py        # OAuth 流程
     ├── plugins/            # 插件系统
-    │   ├── commands.py     # 自定义命令
+    │   ├── commands.py     # 自定义命令/技能发现与加载
     │   ├── marketplace.py  # Skill Marketplace
     │   ├── runtime.py      # 插件运行时
-    │   └── validation.py   # 插件验证
+    │   ├── validation.py   # 插件验证
+    │   └── session.py      # 会话插件管理
     ├── system/             # 系统服务
     │   ├── file_freshness.py
     │   ├── system_prompt.py
@@ -393,13 +394,15 @@ class ToolOutput(BaseModel):
     new_messages: list | None = None
     normalized_messages: list | None = None
     tools: list | None = None
+    is_error: bool = False                    # 工具执行是否出错
+    context_modifier: Any = None              # ContextModifier | None（见 skill-system.md）
 
 class ToolUseContext(BaseModel):
     message_id: str | None
     tool_use_id: str | None = None
     agent_id: str | None = None
     safe_mode: bool = False
-    abort_controller: Any  # asyncio.Event 作为 abort signal
+    abort_event: Any  # asyncio.Event 作为 abort signal
     read_file_timestamps: dict[str, float] = {}
     options: ToolOptions = ToolOptions()
 
@@ -434,6 +437,28 @@ class Tool(ABC):
     def render_result_for_assistant(self, output: Any) -> str | list:
         """将工具结果格式化为 LLM 可读的格式"""
         ...
+
+    # ── 并发语义 ──────────────────────────────────────────────
+    def is_concurrency_safe(self, input: Any = None) -> bool:
+        """是否可并发执行（默认 False）。ToolUseQueue 据此决定并行或串行调度。"""
+        return False
+
+    # ── 输入验证 ──────────────────────────────────────────────
+    async def validate_input(
+        self, input: Any, context: "ToolUseContext | None" = None
+    ) -> "ValidationResult":
+        """额外输入验证（在 Pydantic 验证之后执行），可覆盖"""
+        ...
+
+    # ── Schema 工具方法 ──────────────────────────────────────
+    def get_json_schema(self) -> dict:
+        """生成 JSON Schema（直接调用 Pydantic model_json_schema()）"""
+        return self.input_schema().model_json_schema()
+
+    # ── UI 渲染 ──────────────────────────────────────────────
+    def render_tool_use_message(self, input: Any, options: dict | None = None) -> str:
+        """工具调用的人类可读摘要（UI 显示用），可覆盖"""
+        return f"[{self.name}] {input}"
 ```
 
 ---

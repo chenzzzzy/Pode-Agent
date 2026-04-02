@@ -276,6 +276,8 @@ class ToolOutput(BaseModel):
     data: Any = None
     result_for_assistant: str | list | None = None
     new_messages: list | None = None
+    is_error: bool = False
+    context_modifier: Any = None  # ContextModifier | None（见 skill-system.md）
 
 class ToolOptions(BaseModel):
     commands: list | None = None
@@ -621,16 +623,53 @@ def get_current_account() -> AccountInfo | None:
 
 ### `services/plugins` 模块
 
-**职责**：自定义命令加载、Skill Marketplace 管理、插件验证。
+**职责**：自定义命令/技能发现与加载、Skill Marketplace 管理、Plugin 运行时、插件验证。
+
+> 📖 **完整设计规格**：[skill-system.md](./skill-system.md) — 技能发现、YAML frontmatter、contextModifier、Marketplace、Plugin 架构。
 
 **文件结构**：
 ```
 pode_agent/services/plugins/
 ├── __init__.py
-├── commands.py         # 从 YAML/MD 文件加载自定义命令
-├── marketplace.py      # Skill Marketplace（安装/列出/删除）
-├── runtime.py          # 插件执行环境
-└── validation.py       # Pydantic 校验 manifest
+├── commands.py         # 自定义命令/技能发现与加载（8 目录扫描 + 去重）
+├── marketplace.py      # Skill Marketplace（安装/卸载/启用/禁用）
+├── runtime.py          # Plugin 运行时（plugin.json 解析 + Session 管理）
+├── validation.py       # Plugin/Marketplace/技能目录 schema 校验
+└── session.py          # 会话插件状态管理
+```
+
+**公共 API**：
+
+```python
+# commands.py
+async def load_custom_commands() -> list[CustomCommandWithScope]:
+    """扫描所有标准目录，返回去重后的命令/技能列表"""
+def reload_custom_commands() -> None:
+    """手动失效缓存，下次调用时重新扫描"""
+def parse_frontmatter(content: str) -> tuple[dict, str]:
+    """解析 Markdown 文件的 YAML frontmatter，返回 (frontmatter_dict, body)"""
+
+# marketplace.py
+async def install_skill_plugin(source: MarketplaceSource) -> str:
+    """安装 Skill Plugin，返回插件 ID"""
+async def uninstall_skill_plugin(plugin_id: str) -> None:
+    """卸载已安装的插件"""
+async def list_installed_plugins() -> list[InstalledPlugin]:
+    """列出已安装的插件"""
+
+# runtime.py
+async def configure_session_plugins(config: GlobalConfig) -> list[SessionPlugin]:
+    """加载所有 Plugin 配置到 Session"""
+async def load_plugin_from_dir(plugin_dir: Path) -> PluginManifest:
+    """从目录加载 Plugin 清单"""
+
+# validation.py
+def validate_plugin_json(data: dict) -> list[str]:
+    """校验 plugin.json schema，返回错误列表"""
+def validate_marketplace_json(data: dict) -> list[str]:
+    """校验 marketplace.json schema，返回错误列表"""
+def validate_skill_dir(skill_dir: Path) -> list[str]:
+    """校验技能目录结构，返回错误列表"""
 ```
 
 **自定义命令 YAML 格式**（兼容 Kode-Agent）：
@@ -809,10 +848,6 @@ def get_all_tools() -> list[Tool]:
         # Network
         WebFetchTool(),
         WebSearchTool(),
-        # MCP
-        MCPTool(),
-        ListMcpResourcesTool(),
-        ReadMcpResourceTool(),
         # Interaction
         AskUserQuestionTool(),
         SlashCommandTool(),
@@ -863,6 +898,9 @@ class SessionManager:
         self.permission_context = ToolPermissionContext()
         self.cost_summary = CostSummary()
         self._abort_event = asyncio.Event()
+        self.permission_engine: PermissionEngine = PermissionEngine()
+        self.hook_state: HookState = HookState()
+        self.current_message_id: str | None = None
 
     async def process_input(
         self,
@@ -917,6 +955,7 @@ async def query(
     tools: list[Tool],
     session: "SessionManager",
     options: QueryOptions,
+    system_prompt: str,
 ) -> AsyncGenerator[SessionEvent, None]:
     """Agentic Loop 外层入口，负责初始消息构建，内部委托 query_core()"""
 
