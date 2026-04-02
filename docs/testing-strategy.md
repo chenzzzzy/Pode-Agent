@@ -593,8 +593,12 @@ def test_web_fetch_tool(respx_mock):
 
 ### Phase 4 测试要求
 
-- [ ] `tests/unit/ui/test_permission_dialog.py`：权限对话框渲染
-- [ ] Textual 截图测试（`tests/snapshots/`）
+- [ ] `src/ui/components/__tests__/test_permission_dialog.tsx`：权限对话框渲染（Ink `render()` + `lastFrame()`）
+- [ ] `src/ui/components/__tests__/test_message.tsx`：消息组件渲染测试
+- [ ] `src/ui/__tests__/test_repl.tsx`：REPL Screen 集成测试
+- [ ] `src/ui/rpc/__tests__/test_client.ts`：JSON-RPC 客户端测试
+- [ ] `tests/unit/entrypoints/test_ui_bridge.py`：Python 端 JSON-RPC 服务端测试
+- [ ] React 组件快照测试（`src/ui/__snapshots__/`）
 
 ### Phase 5 测试要求
 

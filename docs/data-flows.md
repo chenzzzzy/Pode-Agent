@@ -29,7 +29,7 @@
 ### 时序图
 
 ```
-User         UI (Textual)     SessionManager   AIProvider     BashTool    FileSystem
+User         UI (React/Ink)     SessionManager   AIProvider     BashTool    FileSystem
  │                │                 │               │             │            │
  │──(input)──────▶│                 │               │             │            │
  │                │──process_input─▶│               │             │            │
@@ -93,7 +93,7 @@ async def process_input(self, prompt: str) -> AsyncGenerator[SessionEvent, None]
 ### 时序图
 
 ```
-SessionManager       PermissionEngine     UI (Textual)      BashTool        Shell
+SessionManager       PermissionEngine     UI (React/Ink)      BashTool        Shell
       │                    │                  │                  │              │
       │──has_permissions()─▶│                  │                  │              │
       │◀──NEEDS_PROMPT──────│                  │                  │              │
@@ -505,7 +505,7 @@ async def build_system_prompt(
 ### 时序图
 
 ```
-User         UI (Textual)    SessionManager    Agent Loop       FileSystem
+User         UI (React/Ink)    SessionManager    Agent Loop       FileSystem
  │                │                │                │               │
  │──(复杂任务)───▶│                │                │               │
  │                │──process_input─▶│               │               │

@@ -27,7 +27,8 @@ classifiers = [
 dependencies = [
     # CLI
     "typer>=0.12.0",
-    # Terminal UI (deferred to Phase 4, but listed for completeness)
+    # Terminal UI — Python 后端输出（rich），前端由 package.json 管理（Bun + React + Ink v5）
+    # 前后端通过 JSON-RPC over stdio 通信
     "rich>=13.7.0",
     # Data validation
     "pydantic>=2.6.0",

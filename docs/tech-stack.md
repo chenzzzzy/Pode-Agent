@@ -20,6 +20,8 @@
 | 项目 | 要求 |
 |------|------|
 | **Python** | ≥ 3.11（用于 `tomllib`、`ExceptionGroup`、`TaskGroup`） |
+| **Bun** | ≥ 1.1（用于 React + Ink v5 终端 UI） |
+| **Node.js** | ≥ 20（可选，Bun 优先） |
 | **操作系统** | Linux、macOS、Windows（WSL2 推荐） |
 | **内存** | ≥ 512MB |
 | **依赖工具** | `ripgrep`（可选，GrepTool 推荐） |
@@ -33,7 +35,8 @@
 | 类别 | 库 | 版本 | TypeScript 对应 |
 |------|-----|------|-----------------|
 | **CLI 框架** | `typer` | ≥0.12 | Commander.js |
-| **终端 UI** | `textual` | ≥0.60 | React + Ink |
+| **终端 UI（Python 后端）** | `rich` | ≥13.7 | chalk |
+| **终端 UI（TypeScript 前端）** | `ink` + `react` | ≥5.2 / ≥18.3 | 自身（深度复刻） |
 | **数据验证** | `pydantic` | ≥2.6 | Zod |
 | **HTTP 客户端** | `httpx` | ≥0.27 | undici / fetch |
 | **LLM - Anthropic** | `anthropic` | ≥0.26 | @anthropic-ai/sdk |
@@ -82,23 +85,24 @@
 
 ---
 
-### 终端 UI：Textual vs Rich vs urwid vs curses
+### 终端 UI：Ink (React) vs Textual vs Rich vs urwid
 
-| 特性 | Textual | Rich | urwid | curses |
-|------|---------|------|-------|--------|
-| 交互式 Widget | ✅ | ❌ | ✅ | 手动 |
-| CSS 样式 | ✅ | ❌ | ❌ | ❌ |
-| 异步支持 | ✅ | ❌ | 有限 | ❌ |
-| 鼠标支持 | ✅ | ❌ | ✅ | 有限 |
-| 测试友好 | ✅（截图）| ✅ | 困难 | 困难 |
-| 活跃维护 | ✅ | ✅ | 一般 | 稳定 |
-| **选择** | ✅ **选用** | 辅助用 | - | - |
+| 特性 | Ink + React | Textual | Rich | urwid |
+|------|-------------|---------|------|-------|
+| 组件化模型 | ✅ React | ✅ Widget | ❌ | ✅ |
+| 与 Kode-Agent 复刻 | ✅ **1:1 直接移植** | 需全部重写 | 不支持 | 需全部重写 |
+| 异步支持 | ✅ | ✅ | ❌ | 有限 |
+| 鼠标支持 | ✅ | ✅ | ❌ | ✅ |
+| 测试友好 | ✅（`render()`/`lastFrame()`）| ✅（截图）| ✅ | 困难 |
+| 活跃维护 | ✅ | ✅ | ✅ | 一般 |
+| Flexbox 布局 | ✅（Yoga）| ✅（CSS）| ❌ | ❌ |
+| **选择** | ✅ **选用** | - | 辅助用 | - |
 
-**选用 Textual 理由**：
-- 最接近 React/Ink 的编程模型（组件化、响应式）
-- 原生异步支持（与 asyncio 完美集成）
-- 有完整的测试工具（`TextualPilot` 用于自动化测试）
-- 活跃的社区和维护（Will McGugan 主导）
+**选用 Ink + React 理由**：
+- 与 Kode-Agent UI 源码 1:1 对应，可直接移植 60+ 组件和 16 个 Hooks
+- React 组件模型成熟，Ink v5 专为终端 UI 设计
+- Bun 运行时性能优秀，启动快
+- 前后端解耦（TypeScript UI + Python 后端，通过 JSON-RPC 通信）
 
 ---
 
@@ -164,30 +168,43 @@ def config_set(key: str, value: str): ...
 def config_get(key: str): ...
 ```
 
-### Textual（终端 UI）
+### Ink + React（终端 UI）
 
-```python
-# 示例：REPL Screen
-from textual.app import App, ComposeResult
-from textual.widgets import Input, ListView, Label
-from textual.containers import Container
+```typescript
+// 示例：REPL Screen（1:1 复刻 Kode-Agent 的 REPL.tsx）
+import React, { useState } from "react";
+import { Box, Text, useInput, render } from "ink";
+import { Static } from "ink";
 
-class ReplScreen(App):
-    CSS = """
-    Screen { background: $surface; }
-    #messages { height: 1fr; overflow-y: scroll; }
-    #input-area { height: auto; dock: bottom; }
-    """
+const REPL: React.FC = () => {
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [inputValue, setInputValue] = useState("");
 
-    def compose(self) -> ComposeResult:
-        yield Container(id="messages")
-        yield Container(
-            Input(placeholder="Type your message...", id="prompt"),
-            id="input-area"
-        )
+  useInput((input, key) => {
+    if (key.return && inputValue.trim()) {
+      handleInput(inputValue);
+    }
+  });
 
-    async def on_input_submitted(self, event: Input.Submitted):
-        await self.process_input(event.value)
+  const handleInput = async (text: string) => {
+    // 通过 JSON-RPC 发送到 Python 后端
+    const response = await rpcClient.send("process_input", { text });
+    setMessages((prev) => [...prev, ...response.messages]);
+  };
+
+  return (
+    <Box flexDirection="column">
+      <Static items={messages}>
+        {(message) => <Message key={message.id} message={message} />}
+      </Static>
+      {isLoading && <Spinner />}
+      <PromptInput value={inputValue} onChange={setInputValue} />
+    </Box>
+  );
+};
+
+render(<REPL />, { exitOnCtrlC: false });
 ```
 
 ### Pydantic v2（数据模型）
@@ -286,8 +303,8 @@ classifiers = [
 dependencies = [
     # CLI
     "typer>=0.12.0",
-    # Terminal UI
-    "textual>=0.60.0",
+    # Terminal UI — Python 后端输出（rich）
+    # 前端 UI 由 package.json 管理（Bun + React + Ink v5），通过 JSON-RPC over stdio 通信
     "rich>=13.7.0",
     # Data validation
     "pydantic>=2.6.0",
@@ -323,7 +340,6 @@ dev = [
     "ruff>=0.4.0",
     "respx>=0.20.0",      # HTTP mocking
     "syrupy>=4.0.0",      # Snapshot testing
-    "textual-dev>=0.60.0", # Textual testing tools
     "types-pyyaml",
     "types-python-dateutil",
 ]
@@ -406,8 +422,11 @@ pytest tests/ --cov=pode_agent --cov-report=html
 # 单个测试
 pytest tests/unit/test_bash_tool.py -v
 
-# 查看 UI（Textual 开发模式）
-textual run --dev pode_agent/ui/app.py
+# 查看 UI（Ink 开发模式）
+bun run dev
+
+# 构建 UI 前端
+bun run build
 ```
 
 ### 版本管理

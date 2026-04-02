@@ -6,6 +6,9 @@ __pycache__/
 
 # Distribution
 dist/
+
+# Node
+node_modules/
 build/
 *.egg-info/
 *.egg
@@ -42,3 +45,6 @@ Thumbs.db
 .pode/
 *.jsonl
 .env
+
+# Reference source (not part of Pode-Agent)
+Kode-Agent/

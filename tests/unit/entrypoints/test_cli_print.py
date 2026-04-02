@@ -37,10 +37,15 @@ class TestVersion:
 
 
 class TestNoPrompt:
-    def test_no_args_shows_repl_message(self) -> None:
+    def test_no_args_launches_repl_or_shows_bun_error(self) -> None:
+        """Without args, CLI attempts to launch REPL (needs Bun) or shows error."""
         result = runner.invoke(app, [])
-        assert result.exit_code == 0
-        assert "not yet implemented" in result.output.lower()
+        # Either: Bun not installed → exit 1 with error message
+        # Or: Bun installed but UI entry missing → exit 1
+        # On success: exit 0
+        assert result.exit_code in (0, 1)
+        if result.exit_code == 1:
+            assert "bun" in result.output.lower() or "ui" in result.output.lower()
 
 
 # ---------------------------------------------------------------------------

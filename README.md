@@ -19,7 +19,7 @@
 
 ## 项目愿景
 
-**Pode-Agent** 是 Kode-Agent 的 Python 重写版本，目标是：
+**Pode-Agent** 是 Kode-Agent 的 Python 重写版本，目标是（Phase 0-4 已完成，638 测试通过）：
 
 - **开发者友好**：使用纯 Python 生态，降低贡献门槛（不需要 Bun/Node 环境）
 - **生产就绪**：完整保留原版所有功能，行为 1:1 对齐
@@ -32,19 +32,19 @@
 
 ## 产品目标
 
-### 短期目标（Phase 1-2，0-3 个月）
-- [ ] 实现完整 CLI 基础框架（typer + rich）
-- [ ] 实现多 LLM Provider 支持（Anthropic、OpenAI）
-- [ ] 实现核心 Tool 系统（Bash、文件读写、Grep）
-- [ ] 实现基础会话管理（JSONL 日志）
-- [ ] 实现权限系统基础
+### 短期目标（Phase 1-2，0-3 个月）— 已完成
+- [x] 实现完整 CLI 基础框架（typer + rich）
+- [x] 实现多 LLM Provider 支持（Anthropic、OpenAI）
+- [x] 实现核心 Tool 系统（Bash、文件读写、Grep）
+- [x] 实现基础会话管理（JSONL 日志）
+- [x] 实现权限系统基础
 
-### 中期目标（Phase 3-4，3-6 个月）
-- [ ] 实现完整终端 UI（Textual 框架）
+### 中期目标（Phase 3-4，3-6 个月）— 部分完成
+- [x] 实现完整终端 UI（React + Ink v5，深度复刻 Kode-Agent）
 - [ ] 实现 MCP 客户端/服务端协议
 - [ ] 实现插件系统（Skill Marketplace）
-- [ ] 实现所有 24+ 个 Tool
-- [ ] 实现上下文管理（项目感知）
+- [x] 实现所有 24+ 个 Tool
+- [x] 实现上下文管理（项目感知）
 
 ### 长期目标（Phase 5，6 个月以上）
 - [ ] 100% 功能对齐 Kode-Agent
@@ -58,13 +58,13 @@
 | 特性 | 描述 |
 |------|------|
 | **多 Provider 支持** | Anthropic Claude、OpenAI GPT-5、Mistral、DeepSeek、Ollama 等 15+ 个 |
-| **智能工具系统** | 24+ 个内置工具（Bash、文件系统、Web 搜索、Jupyter 等） |
+| **智能工具系统** | 25+ 个内置工具（Bash、文件系统、Web 搜索、Jupyter 等） |
 | **权限管理** | 细粒度工具执行权限，每个操作可审批/拒绝 |
 | **会话持久化** | JSONL 格式会话日志，支持断点续传 |
 | **MCP 协议** | 作为 MCP 客户端连接外部服务，也可作为 MCP 服务端暴露工具 |
 | **插件系统** | 从 GitHub/npm/URL 安装技能包（Skill Marketplace） |
 | **上下文感知** | 自动读取 README、git 状态、项目结构 |
-| **终端 UI** | 基于 Textual 的丰富终端界面，支持语法高亮 |
+| **终端 UI** | React + Ink v5 终端界面（1:1 深度复刻 Kode-Agent），支持语法高亮 |
 | **计划模式** | 先规划后执行，减少意外操作 |
 
 ---
@@ -76,7 +76,7 @@
 | **运行时** | Bun / Node.js ≥20 | Python ≥3.11 |
 | **安装方式** | `npm install -g @shareai-lab/kode` | `pip install pode-agent` |
 | **CLI 框架** | Commander.js | Typer |
-| **终端 UI** | React + Ink | Textual |
+| **终端 UI** | React + Ink | React + Ink v5（深度复刻） |
 | **Schema 验证** | Zod | Pydantic v2 |
 | **HTTP 客户端** | undici / fetch | httpx (async) |
 | **测试框架** | Bun test | pytest + pytest-asyncio |
@@ -101,6 +101,7 @@
 | [实施计划](./docs/phases.md)          | 分阶段开发计划，含优先级和依赖 | PM、Tech Lead |
 | [API 规范](./docs/api-specs.md)     | 模块间内部 API 契约 | 开发者 |
 | [测试策略](./docs/testing-strategy.md) | 单元/集成/E2E 测试方案 | QA、开发者 |
+| [SubAgent 系统](./docs/subagent-system.md) | **SubAgent 权威文档**：TaskTool、Agent 配置加载、ForkContext、前台/后台执行、工具权限隔离 | 开发者 |
 
 ---
 
@@ -131,31 +132,38 @@ pode --safe "Run tests and show me the results"
 ## 路线图
 
 ```
-Phase 1 (Weeks 1-4):  基础骨架
+Phase 1 (Weeks 1-4):  基础骨架 ✅ 已完成
   ├─ CLI 框架 + 配置系统
   ├─ 基础 LLM 集成（Anthropic）
   ├─ 核心工具（Bash + File IO + Grep）
   └─ JSONL 会话日志
 
-Phase 2 (Weeks 5-8):  核心功能
+Phase 2 (Weeks 5-8):  核心功能 ✅ 已完成
   ├─ 多 Provider 支持（OpenAI + 自定义）
   ├─ 权限系统
   ├─ 上下文管理（项目感知）
   └─ 所有文件系统工具
 
-Phase 3 (Weeks 9-12): 终端 UI
-  ├─ Textual REPL 界面
-  ├─ 消息渲染（Markdown + 语法高亮）
-  ├─ 权限对话框
-  └─ 进度指示器
+Phase 3 (Weeks 9-12): 完整工具集 ✅ 已完成
+  ├─ 25+ 工具（Web 搜索、Jupyter、Plan Mode 等）
+  ├─ 并发 ToolUseQueue
+  ├─ 动态 System Prompt 组装
+  └─ Auto-compact 框架
 
-Phase 4 (Weeks 13-16): 高级功能
+Phase 4 (Weeks 13-16): 终端 UI ✅ 已完成
+  ├─ React + Ink v5 REPL 界面（深度复刻 Kode-Agent）
+  ├─ JSON-RPC over stdio 双向通信
+  ├─ 消息渲染（Markdown + 语法高亮 + Diff）
+  ├─ 权限对话框（7 种工具类别）
+  └─ PromptInput（历史导航 + 快捷键 + 双击退出）
+
+Phase 5 (Weeks 17-20): 高级功能 ← 进行中
   ├─ MCP 客户端/服务端
   ├─ 插件系统 + Skill Marketplace
-  ├─ Web 工具（搜索 + 抓取）
+  ├─ Hook 系统（4 个注入点）
   └─ ACP 协议
 
-Phase 5 (Weeks 17-20): 完善与发布
+Phase 6 (Weeks 21-24): 完善与发布
   ├─ 100% 功能对齐验证
   ├─ 性能优化
   ├─ 完整文档

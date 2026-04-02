@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Pode-Agent is a Python (>=3.11) 1:1 rewrite of [Kode-Agent](https://github.com/chenzzzzy/Kode-Agent) (TypeScript). It is an AI-powered terminal coding assistant supporting 15+ LLM providers, 25+ tools, MCP protocol, and a Textual-based TUI.
+Pode-Agent is a Python (>=3.11) 1:1 rewrite of [Kode-Agent](https://github.com/chenzzzzy/Kode-Agent) (TypeScript). It is an AI-powered terminal coding assistant supporting 15+ LLM providers, 25+ tools, MCP protocol, and a React + Ink v5 terminal UI (deep 1:1 replication of Kode-Agent's UI layer).
 
 **Current status**: Planning phase — only design docs exist in `docs/`. No source code yet.
 
@@ -13,7 +13,9 @@ Pode-Agent is a Python (>=3.11) 1:1 rewrite of [Kode-Agent](https://github.com/c
 Strict 6-layer architecture with one-way dependencies (lower layers never import higher layers):
 
 ```
-infra ← core ← services ← tools ← app ← ui ← entrypoints
+infra ← core ← services ← tools ← app ← entrypoints
+                                            ↕ (JSON-RPC over stdio)
+                                         src/ui/ (Bun + React + Ink v5)
 ```
 
 | Layer | Package | Responsibility |
@@ -23,7 +25,7 @@ infra ← core ← services ← tools ← app ← ui ← entrypoints
 | Services | `pode_agent/services/` | AI providers (Anthropic/OpenAI adapters + factory), MCP client, context/auth/plugins |
 | Tools | `pode_agent/tools/` | 25+ tool implementations inheriting `core.tools.base.Tool` ABC, organized by category |
 | Application | `pode_agent/app/` | REPL engine, session manager (JSONL persistence), orchestrator, print mode |
-| UI | `pode_agent/ui/` | Textual-based terminal UI (app, screens, widgets, themes) |
+| UI | `src/ui/` (TypeScript) | React + Ink v5 terminal UI (5 screens, 60+ components, 16 hooks), communicates with Python backend via JSON-RPC over stdio |
 | Entrypoints | `pode_agent/entrypoints/` | Thin CLI (Typer), MCP server, ACP server |
 
 Key abstractions:
@@ -35,7 +37,7 @@ Key abstractions:
 ## Design Decisions
 
 - **Pydantic v2** for all data models and JSON Schema generation (replaces Zod)
-- **Textual** for terminal UI (replaces React/Ink) — component model with CSS styling
+- **React + Ink v5** for terminal UI (1:1 deep replication of Kode-Agent UI) — TypeScript/Bun frontend communicates with Python backend via JSON-RPC over stdio
 - **AsyncGenerator** pattern throughout — tool execution, LLM streaming, event publishing
 - **Asyncio-first** — all I/O is async (httpx, `asyncio.create_subprocess_exec`, asyncio.Queue for UI↔session decoupling)
 - **Official SDKs** (anthropic, openai) over abstraction layers like litellm/langchain
@@ -66,8 +68,10 @@ uv run pytest tests/unit/test_bash_tool.py -v # Single test file
 uv run pytest -m "not requires_api_key"       # Skip tests needing real API keys
 uv run pytest -m "e2e"                        # E2E tests only
 
-# UI development
-uv run textual run --dev pode_agent/ui/app.py
+# UI development (React + Ink v5 frontend)
+cd src/ui && bun install && bun run dev   # Start Ink UI in dev mode
+bun run build                             # Build optimized frontend
+bun test                                  # Run frontend component tests
 ```
 
 ## Tooling Configuration
@@ -88,7 +92,7 @@ Detailed in `docs/phases.md`. Phases must be completed in order:
 | 1 | Core features | Permissions, BashTool, file tools, GrepTool |
 | 2 | LLM integration | Anthropic/OpenAI adapters, session manager, print mode |
 | 3 | Full tool set | All 25+ tools |
-| 4 | Terminal UI | Textual REPL interface |
+| 4 | Terminal UI | React + Ink v5 REPL interface (deep replication of Kode-Agent UI) |
 | 5 | MCP & plugins | MCP client/server, skill marketplace, custom commands |
 | 6 | Polish | Extra providers, context optimization, PyPI release |
 

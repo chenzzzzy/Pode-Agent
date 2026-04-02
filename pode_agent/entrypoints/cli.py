@@ -100,8 +100,103 @@ def main(
         exit_code = asyncio.run(run_print_mode(prompt, tools, opts))
         raise typer.Exit(code=exit_code)
 
-    # Phase 4 will add REPL launch here
-    typer.echo("Interactive REPL not yet implemented. Use 'pode --help'.")
+    # Interactive REPL: spawn Bun + Ink UI with JSON-RPC bridge
+    exit_code = asyncio.run(_launch_repl(model=model, safe_mode=safe_mode))
+    raise typer.Exit(code=exit_code)
+
+
+# --- REPL launcher ---
+
+
+async def _launch_repl(*, model: str = "claude-sonnet-4-5-20251101", safe_mode: bool = False) -> int:
+    """Launch the interactive REPL: Bun Ink UI + Python JSON-RPC bridge.
+
+    Architecture::
+
+        Python (parent)  ─── pipe stdin/stdout ───  Bun (child, Ink UI)
+        UIBridge reads from Bun.stdout, writes to Bun.stdin
+        Bun reads from pipe.stdin, writes to pipe.stdout
+
+    Steps:
+        1. Check Bun is installed
+        2. Locate the Ink UI entry point (src/ui/src/index.tsx)
+        3. Spawn Bun as child process with stdin/stdout piped
+        4. Run UIBridge using the child process's stdin/stdout
+        5. Clean up on exit
+    """
+    import shutil
+    from pathlib import Path
+
+    # Check Bun installation
+    bun_path = shutil.which("bun")
+    if bun_path is None:
+        typer.echo(
+            "Error: Bun is required for the interactive REPL but not found.\n"
+            "Install from https://bun.sh",
+            err=True,
+        )
+        return 1
+
+    # Locate UI entry point — look relative to this package
+    package_dir = Path(__file__).resolve().parent.parent.parent  # project root
+    ui_entry = package_dir / "src" / "ui" / "src" / "index.tsx"
+    if not ui_entry.exists():
+        typer.echo(
+            f"Error: UI entry point not found at {ui_entry}\n"
+            "Make sure the src/ui/ directory exists.",
+            err=True,
+        )
+        return 1
+
+    # Check node_modules
+    ui_dir = package_dir / "src" / "ui"
+    if not (ui_dir / "node_modules").exists():
+        typer.echo("Installing UI dependencies...", err=True)
+        install_proc = await asyncio.create_subprocess_exec(
+            bun_path, "install",
+            cwd=str(ui_dir),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        await install_proc.wait()
+        if install_proc.returncode != 0:
+            typer.echo("Error: Failed to install UI dependencies.", err=True)
+            return 1
+
+    # Spawn Bun process
+    proc = await asyncio.create_subprocess_exec(
+        bun_path, "run", str(ui_entry),
+        stdin=asyncio.subprocess.PIPE,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+        cwd=str(ui_dir),
+    )
+
+    if proc.stdin is None or proc.stdout is None:
+        typer.echo("Error: Failed to pipe Bun process stdin/stdout.", err=True)
+        return 1
+
+    # Run UI bridge — read from Bun's stdout, write to Bun's stdin
+    from pode_agent.entrypoints.ui_bridge import UIBridge
+
+    bridge = UIBridge(
+        read_stream=proc.stdout,
+        write_stream=proc.stdin,
+    )
+
+    try:
+        await bridge.run()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        if proc.returncode is None:
+            proc.terminate()
+            try:
+                await asyncio.wait_for(proc.wait(), timeout=5.0)
+            except TimeoutError:
+                proc.kill()
+
+    return proc.returncode or 0
 
 
 # --- Config subcommand group ---
