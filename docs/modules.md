@@ -677,6 +677,23 @@ async def build_system_prompt(
     """构建完整的 system prompt（包含工具描述、项目上下文等）"""
 ```
 
+### `services/agents` 模块
+
+**职责**：SubAgent（子代理）系统的配置加载、上下文隔离、后台任务管理和 Transcript 存储。
+
+> 📖 **完整设计规格**详见 [subagent-system.md](./subagent-system.md)。
+
+**文件结构**（Phase 5 新建）：
+```
+pode_agent/services/agents/
+├── __init__.py
+├── loader.py              # AgentConfig 多源发现 + 优先级合并
+├── storage.py             # Markdown + YAML frontmatter 解析、文件管理
+├── transcripts.py         # Transcript 内存存储（dict）
+├── background_tasks.py    # 后台 Agent 任务管理（注册/更新/等待/快照）
+└── fork_context.py        # ForkContext 构建（从 JSONL 读取父消息）
+```
+
 ---
 
 ## Tools 层模块
@@ -978,46 +995,104 @@ async def run_print_mode(
 
 ## UI 层模块
 
-### `ui/app.py`（Textual 主应用）
+> UI 层使用 **React + Ink (TypeScript)** 实现，通过 JSON-RPC over stdio 与 Python 后端通信。
 
-```python
-class PodeApp(App):
-    """Pode-Agent 的 Textual 应用"""
-    
-    CSS_PATH = "styles.tcss"
-    BINDINGS = [
-        ("ctrl+c", "quit", "Quit"),
-        ("ctrl+k", "clear", "Clear"),
-        ("ctrl+r", "resume", "Resume conversation"),
-        ("ctrl+m", "switch_model", "Switch model"),
-    ]
+### `src/ui/index.tsx`（Ink 入口）
 
-    def __init__(
-        self,
-        session: SessionManager,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-        self.session = session
+```typescript
+// src/ui/index.tsx — Ink render 入口
+import { render } from "ink";
+import REPL from "./screens/REPL";
+
+// 通过 JSON-RPC over stdio 与 Python 后端通信
+const rpcClient = new JsonRpcClient(process.stdin, process.stdout);
+
+render(<REPL rpcClient={rpcClient} />, { exitOnCtrlC: false });
 ```
 
-### `ui/screens/repl_screen.py`（主 REPL 界面）
+### `src/ui/screens/REPL.tsx`（主 REPL 界面）
 
-```python
-class ReplScreen(Screen):
-    """主交互界面"""
-    
-    def compose(self) -> ComposeResult:
-        yield Header(show_clock=False)
-        yield MessageView(id="messages")           # 消息列表
-        yield StatusBar(id="status")               # 状态栏（模型、费用）
-        yield PromptInput(id="prompt")             # 输入框
-        yield Footer()                             # 快捷键提示
+React 函数式组件（约 779 行），包含完整的状态管理：消息列表、加载状态、中止请求、工具确认、二选一反馈、费用阈值对话框。
 
-    async def on_prompt_input_submitted(self, event):
-        """处理用户提交输入"""
-        async for session_event in self.session.process_input(event.value):
-            await self._handle_session_event(session_event)
+渲染组件树：Logo + Static messages、transient messages、PromptInput、PermissionRequest、BinaryFeedback、CostThresholdDialog、MessageSelector。
+
+通过 `PermissionProvider` Context 管理权限状态。
+
+```typescript
+// src/ui/screens/REPL.tsx — 核心结构示意
+const REPL: React.FC<{ rpcClient: JsonRpcClient }> = ({ rpcClient }) => {
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+
+  return (
+    <PermissionProvider rpcClient={rpcClient}>
+      <Logo />
+      <Static items={messages}>{renderMessage}</Static>
+      {isLoading && <Spinner />}
+      <PromptInput onSubmit={handleSubmit} />
+      <PermissionRequest />
+      <BinaryFeedback />
+      <CostThresholdDialog />
+      <MessageSelector />
+    </PermissionProvider>
+  );
+};
+```
+
+### `src/ui/hooks/`（React Hooks）
+
+16 个自定义 Hook，按职责组织：
+
+| Hook | 职责 |
+|------|------|
+| `useTerminalSize` | 监听终端尺寸变化 |
+| `useTextInput` | 管理输入框状态与提交 |
+| `useUnifiedCompletion` | 统一的 Tab 补全逻辑 |
+| `useArrowKeyHistory` | 上下箭头历史记录导航 |
+| `useCancelRequest` | 取消正在进行的请求 |
+| `useCanUseTool` | 检查工具是否可用 |
+| `useCostSummary` | 计算并展示费用摘要 |
+| `useDoublePress` | 双击按键检测 |
+| `useExitOnCtrlCD` | Ctrl+C/D 退出确认 |
+| `useInterval` | 定时轮询 Hook |
+| `useMessageState` | 消息列表状态管理 |
+| `useToolConfirmation` | 工具确认对话框状态 |
+| `useBinaryFeedback` | 二选一反馈状态 |
+| `useCostThreshold` | 费用阈值对话框状态 |
+| `useModelSelector` | 模型选择器状态 |
+| `useSession` | 会话数据与 RPC 通信 |
+
+### `src/ui/components/`（UI 组件）
+
+60+ React 组件，按类别组织：
+
+| 目录 | 组件示例 | 职责 |
+|------|---------|------|
+| `messages/` | `UserMessage`, `AssistantMessage`, `ToolResultMessage`, `SystemMessage` | 各类型消息渲染 |
+| `permissions/` | `PermissionRequest`, `PermissionBanner`, `PermissionProvider` | 权限请求与审批 UI |
+| `binary-feedback/` | `BinaryFeedback`, `FeedbackOption` | 二选一反馈交互 |
+| `model-selector/` | `ModelSelector`, `ModelOption` | LLM 模型切换选择器 |
+| `custom-select/` | `CustomSelect`, `SelectOption` | 自定义选择器组件 |
+| 根目录 | `PromptInput`, `StatusBar`, `Logo`, `Spinner`, `MessageSelector`, `CostThresholdDialog` | 通用 UI 组件 |
+
+### `src/ui/rpc/client.ts`（JSON-RPC 客户端）
+
+通过 stdio 与 Python 后端通信的 JSON-RPC 客户端，支持双向消息流。
+
+```typescript
+// src/ui/rpc/client.ts — 核心接口示意
+class JsonRpcClient {
+  constructor(stdin: NodeJS.ReadStream, stdout: NodeJS.WriteStream);
+
+  // 发送请求并等待响应
+  request(method: string, params?: unknown): Promise<unknown>;
+
+  // 发送通知（不等待响应）
+  notify(method: string, params?: unknown): void;
+
+  // 订阅后端推送的事件（流式消息、工具确认请求等）
+  onNotification(handler: (notification: JsonRpcNotification) => void): void;
+}
 ```
 
 ---

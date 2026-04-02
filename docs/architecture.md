@@ -134,6 +134,12 @@ pode_agent/
     │   ├── file_freshness.py
     │   ├── system_prompt.py
     │   └── reminders.py
+    ├── agents/              # SubAgent 系统（Phase 5）
+    │   ├── loader.py        # Agent 配置多源加载 + 优先级合并
+    │   ├── storage.py       # Markdown + YAML frontmatter 解析
+    │   ├── transcripts.py   # Transcript 内存存储
+    │   ├── background_tasks.py  # 后台 Agent 任务管理
+    │   └── fork_context.py  # ForkContext 上下文隔离
     └── telemetry/
         └── sentry.py
 ```
@@ -208,24 +214,109 @@ pode_agent/
 
 ### Layer 6：UI（界面层）
 
-基于 Textual 的终端 UI（仅依赖 Application Layer）：
+基于 React + Ink v5 的终端 UI（TypeScript/Bun 运行时），通过 JSON-RPC over stdio 与 Python 后端通信。1:1 深度复刻 Kode-Agent 的 UI 层。
 
 ```
-pode_agent/
-└── ui/
-    ├── app.py              # Textual App 主类
-    ├── screens/
-    │   ├── repl_screen.py  # 主 REPL 界面
-    │   ├── doctor.py       # 诊断界面
-    │   └── log_list.py     # 历史记录界面
-    ├── widgets/
-    │   ├── message_view.py # 消息列表
-    │   ├── prompt_input.py # 输入框
-    │   ├── permission_dialog.py # 权限对话框
-    │   ├── status_bar.py   # 状态栏
-    │   ├── cost_summary.py # 费用显示
-    │   └── model_selector.py # 模型选择器
-    └── theme.py            # 主题系统
+src/ui/
+├── index.tsx                      # Ink render 入口
+├── theme.ts                       # 4 套主题（dark/light/dark-daltonized/light-daltonized）
+├── screens/
+│   ├── REPL.tsx                   # 主 REPL 界面（~779 行，完整状态管理）
+│   ├── ResumeConversation.tsx     # 会话恢复
+│   ├── LogList.tsx                # 历史记录界面
+│   ├── Doctor.tsx                 # 诊断界面
+│   └── MCPServerApproval.tsx      # MCP 服务器审批
+├── components/
+│   ├── PromptInput.tsx            # 输入框（~860 行，补全/历史/粘贴/编辑器集成）
+│   ├── TextInput.tsx              # 底层文本输入（bracketed paste/光标/多行）
+│   ├── Message.tsx                # 消息分发器（路由到各消息类型组件）
+│   ├── Spinner.tsx                # 加载动画
+│   ├── Logo.tsx                   # 欢迎横幅
+│   ├── Cost.tsx                   # 费用显示
+│   ├── CostThresholdDialog.tsx    # 费用警告（>$5）
+│   ├── RequestStatusIndicator.tsx # 请求状态指示
+│   ├── ToolUseLoader.tsx          # 工具执行状态动画
+│   ├── StructuredDiff.tsx         # Diff 渲染
+│   ├── HighlightedCode.tsx        # 语法高亮代码
+│   ├── MessageSelector.tsx        # 消息回溯选择
+│   ├── Onboarding.tsx             # 首次运行向导
+│   ├── TrustDialog.tsx            # 安全模式信任确认
+│   ├── Help.tsx                   # 帮助显示
+│   ├── Config.tsx                 # 设置界面
+│   ├── messages/                  # 15 个消息类型组件
+│   │   ├── AssistantTextMessage.tsx
+│   │   ├── AssistantToolUseMessage.tsx
+│   │   ├── AssistantThinkingMessage.tsx
+│   │   ├── AssistantRedactedThinkingMessage.tsx
+│   │   ├── AssistantBashOutputMessage.tsx
+│   │   ├── TaskProgressMessage.tsx
+│   │   ├── TaskToolMessage.tsx
+│   │   ├── UserTextMessage.tsx
+│   │   ├── UserImageMessage.tsx
+│   │   ├── UserBashInputMessage.tsx
+│   │   ├── UserCommandMessage.tsx
+│   │   ├── UserKodingInputMessage.tsx
+│   │   └── ...                    # 其他消息类型
+│   ├── user-tool-result-message/  # 6 个工具结果组件
+│   │   ├── UserToolResultMessage.tsx
+│   │   ├── UserToolSuccessMessage.tsx
+│   │   ├── UserToolErrorMessage.tsx
+│   │   ├── UserToolRejectMessage.tsx
+│   │   ├── UserToolCanceledMessage.tsx
+│   │   └── utils.tsx
+│   ├── permissions/               # 15+ 个权限对话框组件
+│   │   ├── PermissionRequest.tsx  # 权限分发器
+│   │   ├── BashPermissionRequest.tsx
+│   │   ├── FileEditPermissionRequest.tsx
+│   │   ├── FileWritePermissionRequest.tsx
+│   │   ├── FilesystemPermissionRequest.tsx
+│   │   ├── SlashCommandPermissionRequest.tsx
+│   │   ├── SkillPermissionRequest.tsx
+│   │   ├── WebFetchPermissionRequest.tsx
+│   │   ├── EnterPlanModePermissionRequest.tsx
+│   │   ├── ExitPlanModePermissionRequest.tsx
+│   │   ├── AskUserQuestionPermissionRequest.tsx
+│   │   ├── FallbackPermissionRequest.tsx
+│   │   └── ...
+│   ├── binary-feedback/           # A/B 反馈组件
+│   │   ├── BinaryFeedback.tsx
+│   │   ├── BinaryFeedbackOption.tsx
+│   │   └── BinaryFeedbackView.tsx
+│   ├── model-selector/            # 模型选择组件
+│   │   ├── ModelSelector.tsx
+│   │   ├── ModelSelectionScreen.tsx
+│   │   └── ModelListManager.tsx
+│   └── custom-select/             # 自定义选择器
+│       ├── select.tsx
+│       ├── select-option.tsx
+│       └── use-select.ts
+├── hooks/                         # 16 个 React Hooks
+│   ├── useTerminalSize.ts         # 终端尺寸跟踪
+│   ├── useTextInput.ts            # 文本输入 hook
+│   ├── useUnifiedCompletion.ts    # 自动补全
+│   ├── useArrowKeyHistory.ts      # 历史导航
+│   ├── useCancelRequest.ts        # ESC 取消
+│   ├── useCanUseTool.ts           # 工具权限检查
+│   ├── useCostSummary.ts          # 费用追踪
+│   ├── useDoublePress.ts          # 双击检测
+│   ├── useExitOnCtrlCD.ts         # Ctrl+C/D 退出
+│   ├── useInterval.ts             # setInterval hook
+│   └── ...
+└── rpc/
+    └── client.ts                  # JSON-RPC 客户端（与 Python 后端通信）
+```
+
+**通信架构**：UI 进程（Bun）和后端进程（Python daemon）通过 stdio 双向 JSON-RPC 通信：
+
+```
+┌──────────────────────┐   stdin/stdout   ┌──────────────────────────┐
+│   Bun Process        │ ◀══════════════▶ │   Python Process         │
+│   (React + Ink v5)   │   JSON-RPC       │   (pode_agent/)          │
+│                      │                  │                          │
+│   UI 渲染 + 用户交互  │                  │   Agent Loop + Tools     │
+│   状态管理（React）   │                  │   Session + Permissions  │
+│   主题（Chalk 5）     │                  │   Config + Logging       │
+└──────────────────────┘                  └──────────────────────────┘
 ```
 
 ---
@@ -250,25 +341,35 @@ pode_agent/
 ```
 entrypoints
     │
-    ▼
-  app/ui  ←──────────────────────────────────────┐
-    │                                              │
-    ├──► services/ai ──► core/tools ──► infra     │
-    ├──► services/mcp                              │
-    ├──► services/context                          │
-    ├──► services/plugins                          │
-    ├──► core/permissions                          │
-    ├──► core/config                               │
-    └──► core/cost_tracker                         │
-                                                   │
-tools ────────────────────────────────────────────┘
-  (tools depend on core/tools ABC but register to app)
+    ├──► app  ──────────────────────────────────────┐
+    │       │                                       │
+    │       ├──► services/ai ──► core/tools ──► infra
+    │       ├──► services/mcp                       │
+    │       ├──► services/context                   │
+    │       ├──► services/plugins                   │
+    │       ├──► core/permissions                   │
+    │       ├──► core/config                        │
+    │       └──► core/cost_tracker                  │
+    │                                               │
+    │       + JSON-RPC bridge (ui_bridge.py)        │
+    │           │                                   │
+    │           │ stdin/stdout JSON-RPC             │
+    │           │                                   │
+    │       src/ui/ (Bun Process) ◀─────────────────┘
+    │         React + Ink v5
+    │         5 Screens, 60+ Components, 16 Hooks
+    │
+tools ──(register to app via core/tools ABC)
 ```
 
 **依赖方向规则**（严格执行）：
 
 ```
-infra ← core ← services ← tools ← app ← ui ← entrypoints
+# Python 后端（单体进程）
+infra ← core ← services ← tools ← app ← entrypoints
+
+# TypeScript 前端（独立 Bun 进程）
+src/ui/ ←→ (JSON-RPC over stdio) ←→ entrypoints/ui_bridge.py
 ```
 
 任何违反此方向的导入都是架构错误。
@@ -437,23 +538,24 @@ class PermissionEngine:
 
 ---
 
-### 决策 2：使用 Textual 替代 React/Ink
+### 决策 2：使用 React + Ink v5 深度复刻 Kode-Agent UI
 
-**背景**：Kode-Agent 使用 React + Ink 构建终端 UI。
+**背景**：Kode-Agent 使用 React + Ink v5 构建终端 UI，包含 5 个 Screen、60+ 个组件、16 个 Hooks。
 
-**选择 Textual 的理由**：
-- Python 原生终端 UI 框架，最成熟
-- 支持 CSS-like 样式系统
-- 内置组件（Input、ListView、DataTable 等）
-- 支持鼠标、键盘事件
-- 可生成截图（测试友好）
+**选择 React + Ink 的理由**：
+- 1:1 深度复刻 Kode-Agent 源码，降低维护偏差
+- Ink v5 + React 18 是成熟的终端 UI 方案（Kode-Agent 已验证）
+- 前后端解耦：UI（TypeScript/Bun）和后端（Python）独立开发
+- 组件可直接从 Kode-Agent 移植，大幅减少 UI 开发工作量
+
+**通信方式**：JSON-RPC over stdio/pipe，Python 后端作为 daemon 运行，TypeScript UI 作为独立 Bun 进程。
 
 **替代方案考虑**：
+- `Textual`（Python 原生但无法复刻 Kode-Agent 组件，需全部重写）
 - `rich`（too simple, 无交互性）
 - `urwid`（过时）
-- `blessed`（底层，需大量手写）
 
-**影响**：UI 层全部用 Textual Widget 替代 React Component。
+**影响**：UI 层使用 TypeScript/React（Ink v5），通过 JSON-RPC 与 Python 后端通信。后端（`pode_agent/`）需新增 `entrypoints/ui_bridge.py` 提供 JSON-RPC 服务端。
 
 ---
 
@@ -524,31 +626,41 @@ stdout, stderr = await proc.communicate()
 Pode-Agent 的异步模型基于 Python `asyncio`：
 
 ```
-┌──────────────────────────────────────┐
-│           asyncio Event Loop          │
-│                                       │
-│  ┌─────────────┐  ┌───────────────┐  │
-│  │  UI Task    │  │  Session Task │  │
-│  │ (Textual)   │  │ (REPL Engine) │  │
-│  └──────┬──────┘  └───────┬───────┘  │
-│         │                 │          │
-│  ┌──────▼──────────────────▼───────┐ │
-│  │       asyncio.Queue             │ │
-│  │  (UI events ↔ Session events)   │ │
-│  └─────────────────────────────────┘ │
-│                                       │
-│  ┌───────────────────────────────┐   │
-│  │   Tool Executor Tasks (parallel)  │
-│  │  [BashTool] [FileEdit] [Grep] │   │
-│  └───────────────────────────────┘   │
-└──────────────────────────────────────┘
+┌──────────────────────────────────────────────────┐
+│              双进程架构                           │
+│                                                   │
+│  ┌──────────────────────────┐                    │
+│  │  Bun Process             │                    │
+│  │  (React + Ink v5)        │                    │
+│  │                          │                    │
+│  │  UI 渲染 + 用户交互       │                    │
+│  │  React 状态管理           │                    │
+│  │  Chalk 5 主题/颜色        │                    │
+│  └───────────┬──────────────┘                    │
+│              │ stdin/stdout JSON-RPC              │
+│  ┌───────────▼──────────────┐                    │
+│  │  Python Process          │                    │
+│  │  (asyncio Event Loop)    │                    │
+│  │                          │                    │
+│  │  ┌──────────────────┐    │                    │
+│  │  │ Session Task     │    │                    │
+│  │  │ (REPL Engine)    │    │                    │
+│  │  └──────────────────┘    │                    │
+│  │                          │                    │
+│  │  ┌──────────────────────┐│                    │
+│  │  │ Tool Executor Tasks  ││                    │
+│  │  │ (parallel)           ││                    │
+│  │  │ [Bash][FileEdit]...  ││                    │
+│  │  └──────────────────────┘│                    │
+│  └──────────────────────────┘                    │
+└──────────────────────────────────────────────────┘
 ```
 
-**UI 与业务逻辑解耦**：
+**UI 与业务逻辑解耦**（通过 JSON-RPC over stdio）：
 
-- UI 通过 `asyncio.Queue` 发送用户事件
-- Session 通过 `asyncio.Queue` 推送更新到 UI
-- 工具调用在独立 Task 中运行（支持中断）
+- Python 后端作为 daemon 运行，监听 stdin 接收 JSON-RPC 请求
+- Bun UI 进程通过 stdout 发送用户事件，通过 stdin 接收会话事件
+- 工具调用在独立 asyncio Task 中运行（支持中断）
 
 **中断信号**：
 
@@ -658,11 +770,23 @@ commands:
 
 ### 4. UI 主题
 
-```python
-# 自定义主题（Textual CSS）
-APP_CSS = """
-Screen {
-  background: #1a1a2e;
+```typescript
+// 自定义主题（Chalk 5 + TypeScript）
+// 1:1 复刻 Kode-Agent 的 theme.ts
+type Theme = {
+  kode: string           // 主品牌色
+  text: string           // 主文本
+  secondaryText: string  // 次要文本
+  permission: string     // 权限对话框强调色
+  planMode: string       // 计划模式强调色
+  success: string        // 成功消息
+  error: string          // 错误消息
+  warning: string        // 警告消息
+  diff: {
+    added: string        // Diff 新增行
+    removed: string      // Diff 删除行
+  }
 }
-"""
+
+// 4 套内置主题：dark / light / dark-daltonized / light-daltonized
 ```

@@ -64,7 +64,7 @@ pode_agent/
     │   └── skill.py       # SkillTool
     └── agent/
         ├── plan_mode.py   # EnterPlanModeTool / ExitPlanModeTool
-        ├── task.py        # TaskTool
+        ├── task.py        # TaskTool（SubAgent 管理工具 — Phase 5 完整实现，详见 subagent-system.md）
         └── ls.py          # LsTool
 ```
 
@@ -646,3 +646,5 @@ my_tool = "my_package.tools:MyTool"
 | MCP 工具包装（`MCPTool`） | `pode_agent/services/mcp/tools.wrap_mcp_tool_as_pode_tool()` |
 | `EnterPlanMode` / `ExitPlanMode` 工具 | `pode_agent/tools/agent/plan_mode.py` |
 | `src/tools/index.ts`（工具总清单） | `pode_agent/tools/__init__.py: get_all_tools()` |
+
+> 📖 **SubAgent 工具完整设计**：[subagent-system.md](./subagent-system.md) — TaskTool 的输入/输出 Schema、前台/后台执行流程、Agent 配置加载、上下文隔离（ForkContext）、工具权限三层过滤、模型选择优先级、后台任务管理、Transcript 存储。

@@ -934,6 +934,8 @@ async def check_permissions_and_call_tool(
 
 本文档描述的所有组件均属于 **Application 层**（`pode_agent/app/`），以下是详细的模块映射：
 
+> 📖 **SubAgent 系统详解**：[subagent-system.md](./subagent-system.md) — TaskTool 完整设计、Agent 配置加载、上下文隔离（ForkContext）、前台/后台执行、工具权限隔离、Transcript 存储。SubAgent 复用本文档描述的 `query()` / `query_core()` 递归主循环，通过独立的子 SessionManager 实例实现上下文隔离。
+
 | 本文档的组件 | Python 模块 | 文件路径 |
 |------------|------------|---------|
 | `query()` 外层入口 | `app.query` | `pode_agent/app/query.py` |

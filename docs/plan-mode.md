@@ -462,6 +462,8 @@ query_core() 递归（携带更新后的 options）
 
 ## 与 SubAgent / TaskTool 的关系
 
+> 📖 **SubAgent 完整设计**：[subagent-system.md](./subagent-system.md) — TaskTool 数据模型、前台/后台执行流程、Agent 配置加载、上下文隔离、工具权限隔离。
+
 ### 当前范围（Phase 3）
 
 Phase 3 实现的 Plan Mode 是**单 Agent 模式**：
@@ -469,22 +471,22 @@ Phase 3 实现的 Plan Mode 是**单 Agent 模式**：
 - 执行也由主 Agent 按步骤推进
 - 不涉及子 Agent 并行执行
 
-### TaskTool（Phase 5+）
+### TaskTool（Phase 5）
 
-`TaskTool` 是 Kode-Agent 中支持"子任务 Agent"的工具，允许将计划的某个步骤委托给独立的子 Agent 执行：
+`TaskTool` 支持将计划步骤委托给独立的子 Agent 执行。完整设计（前台/后台模式、Agent 配置加载、ForkContext、工具权限隔离、Transcript 存储）详见 [subagent-system.md](./subagent-system.md)。
 
 ```
 主 Agent（计划模式）
     │
     ├── 步骤 1：探索代码库（FileReadTool）
-    ├── 步骤 2：TaskTool(subtask="重构 auth.py")
-    │       └── 子 Agent（独立 Agent Loop）
+    ├── 步骤 2：TaskTool(subagent_type="general-purpose", prompt="重构 auth.py")
+    │       └── 子 Agent（独立 Agent Loop，隔离上下文和工具）
     │               ├── FileEditTool
     │               └── BashTool（运行测试）
     └── 步骤 3：验证结果（BashTool）
 ```
 
-**注意**：`TaskTool` 在 Phase 5 实现，与 MCP 和插件系统同期。Plan Mode 的核心（Phase 3）不依赖 `TaskTool`。
+**注意**：`TaskTool` 在 Phase 5 实现。Plan Mode 的核心（Phase 3）不依赖 `TaskTool`。
 
 ---
 
@@ -500,9 +502,9 @@ Phase 3 实现的 Plan Mode 是**单 Agent 模式**：
 | `ExitPlanModeTool` | Phase 3 | 输出 Plan 对象 + 重置 permission_mode |
 | Plan Mode System Prompt Additions | Phase 3 | `build_system_prompt()` 中注入 |
 | `load_plan_from_log()` 会话恢复 | Phase 3 | JSONL replay |
-| UI 计划显示（结构化渲染） | Phase 4 | Textual Widget 展示 PlanStep 列表 |
-| UI 审批/拒绝交互 | Phase 4 | 审批按钮 + 拒绝原因输入 |
-| 执行进度追踪（`plan_step_done` 事件） | Phase 4 | 配合 UI 进度显示 |
+| UI 计划显示（结构化渲染） | Phase 4 | React/Ink 组件（EnterPlanModePermissionRequest.tsx）展示 PlanStep 列表 |
+| UI 审批/拒绝交互 | Phase 4 | Ink SelectInput 审批组件 + 拒绝原因输入 |
+| 执行进度追踪（`plan_step_done` 事件） | Phase 4 | 配合 UI 进度显示（TaskProgressMessage.tsx） |
 | `TaskTool`（子 Agent 执行） | Phase 5 | 依赖 MCP 架构 |
 | 计划模板（预设结构化提示） | Phase 6 | 优化 Agent 计划质量 |
 
@@ -520,4 +522,4 @@ Phase 3 实现的 Plan Mode 是**单 Agent 模式**：
 | 计划存储（session log） | Session JSONL 事件（`plan_created` / `plan_step_done` 等） |
 | `taskTool`（子任务 Agent） | `pode_agent/tools/agent/task.TaskTool`（Phase 5） |
 | `permissionMode` 传播路径 | `ToolUseContext.options.permission_mode`（透传到每次递归） |
-| 计划审批 UI | `pode_agent/ui/widgets/plan_approval.py`（Phase 4） |
+| 计划审批 UI | `src/ui/components/permissions/EnterPlanModePermissionRequest.tsx`（Phase 4） |

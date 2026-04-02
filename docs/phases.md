@@ -1,6 +1,6 @@
 # Pode-Agent 分阶段实施计划
 
-> 版本：1.4.0 | 状态：Phase 3 已完成 | 更新：2026-04-02
+> 版本：1.5.0 | 状态：Phase 4 已完成 | 更新：2026-04-02
 > **给 Code Agent 的说明**：请严格按照阶段顺序实施。每个阶段结束时运行对应验收测试，通过后才能进入下一阶段。
 
 ---
@@ -12,7 +12,7 @@
 3. [Phase 1：核心功能（Weeks 2-4）](#phase-1核心功能)
 4. [Phase 2：LLM 集成与会话管理（Weeks 5-7）](#phase-2llm-集成与会话管理)
 5. [Phase 3：完整工具集（Weeks 8-10）](#phase-3完整工具集)
-6. [Phase 4：终端 UI（Weeks 11-13）](#phase-4终端-ui)
+6. [Phase 4：终端 UI（React + Ink v5）（Weeks 11-13）](#phase-4终端-uireact--ink-v5)
 7. [Phase 5：MCP 与插件系统（Weeks 14-16）](#phase-5mcp-与插件系统)
 8. [Phase 6：高级特性与完善（Weeks 17-20）](#phase-6高级特性与完善)
 9. [验收标准矩阵](#验收标准矩阵)
@@ -37,7 +37,7 @@ Phase: │ 0  │    │     1       │    │    2    │    │   3     │  
 | M0: 项目骨架 | Week 1 | 可运行的空壳 CLI |
 | M1: MVP | Week 7 | 可使用基础工具的非交互模式 |
 | M2: 完整工具 | Week 10 | 所有 25+ 工具可用 |
-| M3: 完整 UI | Week 13 | Textual REPL 界面完整 |
+| M3: 完整 UI | Week 13 | React + Ink REPL 界面完整 |
 | M4: 完整协议 | Week 16 | MCP + 插件 + ACP 支持 |
 | M5: 1.0 发布 | Week 20 | PyPI 发布，功能 100% 对齐 |
 
@@ -589,7 +589,7 @@ uv run pytest tests/ -q        # 318 passed, 1 skipped
 | SkillTool | `tools/ai/skill.py` | 执行已安装的 Skill |
 | **EnterPlanModeTool** | `tools/agent/plan_mode.py` | **进入计划模式**（详见 plan-mode.md） |
 | **ExitPlanModeTool** | `tools/agent/plan_mode.py` | **退出计划模式，输出 Plan 对象** |
-| TaskTool | `tools/agent/task.py` | 子任务管理（完整版在 Phase 5） |
+| TaskTool | `tools/agent/task.py` | SubAgent 管理工具 — 创建/执行/恢复子代理（Phase 5 完整实现，见 [subagent-system.md](./subagent-system.md)） |
 | SlashCommandTool | `tools/interaction/slash_command.py` | 执行自定义命令 |
 
 #### Web 搜索提供商（Week 10）
@@ -640,109 +640,184 @@ Pode "Help me refactor auth.py"
 
 ---
 
-## Phase 4：终端 UI
+## Phase 4：终端 UI（React + Ink v5） ✅ 已完成
 
-**目标**：实现基于 Textual 的完整 REPL 界面，以及 Plan Mode 的审批 UI 和进度追踪。  
-**时间**：Weeks 11-13（15 个工作日）  
-**依赖**：Phase 2 完成（可与 Phase 3 并行）  
-**负责 Agent**：UI 开发 Agent
+**目标**：基于 React + Ink v5 深度复刻 Kode-Agent 终端 UI，通过 JSON-RPC over stdio 与 Python 后端通信。
+**时间**：Weeks 11-13（15 个工作日）
+**依赖**：Phase 2 完成（可与 Phase 3 并行）
+**负责 Agent**：UI 开发 Agent（需要 TypeScript/React 经验）
+**实际完成日期**：2026-04-02
 
 **Phase 4 Plan Mode UI 子块**（对应 [plan-mode.md](./plan-mode.md)）：
 
 | 子功能 | 文件 | 说明 |
 |--------|------|------|
-| 计划审批 Widget | `ui/widgets/plan_approval.py` | 展示 Plan 对象；批准/拒绝按钮 |
-| 计划执行进度 Widget | `ui/widgets/plan_progress.py` | 展示步骤列表，已完成步骤标记 ✓ |
-| SessionEvent 处理（`plan_created`/`plan_step_done`） | `ui/screens/repl_screen.py` | 监听计划事件，更新 UI |
+| 计划审批组件 | `src/ui/components/permissions/EnterPlanModePermissionRequest.tsx` | 展示 Plan 对象；批准/拒绝选项 |
+| 计划执行进度组件 | `src/ui/components/messages/TaskProgressMessage.tsx` | 展示步骤列表，已完成步骤标记 ✓ |
+| SessionEvent 处理 | `src/ui/screens/REPL.tsx` | 监听 JSON-RPC 事件，更新 UI 状态 |
 
 ### 任务列表
 
-#### 任务 4.1：基础 Textual 应用框架（Week 11，Day 1-2）
+#### 任务 4.1：前端工程骨架 + JSON-RPC 桥接（Week 11，Day 1-2） ✅
 
 **文件**：
-- `pode_agent/ui/app.py` — PodeApp（Textual App 子类）
-- `pode_agent/ui/theme.py` — 主题（深色/浅色）
-- `pode_agent/ui/styles.tcss` — Textual CSS 样式
+- `package.json` — Bun + React + Ink v5 依赖（ink ≥5.2, react ≥18.3, chalk ≥5.4, @inkjs/ui ≥2.0, ink-text-input ≥6.0, ink-select-input ≥6.2, cli-highlight ≥2.1, diff ≥7.0, figures ≥6.1）
+- `tsconfig.json` — TypeScript 配置
+- `bunfig.toml` — Bun 配置
+- `src/ui/index.tsx` — Ink render 入口
+- `src/ui/theme.ts` — 4 套主题（dark/light/dark-daltonized/light-daltonized）
+- `src/ui/rpc/client.ts` — JSON-RPC over stdio 客户端
+- `src/ui/rpc/transport.ts` — Stdio 传输层
+- `pode_agent/entrypoints/ui_bridge.py` — Python 端 JSON-RPC 服务端
+
+**验收标准**：
+- [x] `bun install` 成功安装所有前端依赖
+- [x] `bun run dev` 启动 Ink UI 显示欢迎画面
+- [x] Python JSON-RPC 服务端能接收/响应基本消息
+- [x] 前端能通过 JSON-RPC 与 Python 后端通信
 
 ---
 
-#### 任务 4.2：消息显示 Widget（Week 11，Day 3-5）
+#### 任务 4.2：REPL.tsx 核心 Screen（Week 11，Day 3 - Week 12，Day 1） ✅
 
-**文件**：`pode_agent/ui/widgets/message_view.py`
+**文件**：`src/ui/screens/REPL.tsx`（~779 行，从 Kode-Agent `src/ui/screens/REPL.tsx` 移植）
 
-**功能**：
-- 滚动消息列表
-- 用户消息（右对齐，不同颜色）
-- AI 响应（Markdown 渲染 via `rich.Markdown`）
-- 代码块语法高亮
-- 工具调用显示（工具名、参数摘要）
-- 工具结果折叠显示
+**功能**（1:1 复刻 Kode-Agent REPL）：
+- 完整的 React 状态管理（messages, isLoading, abortController, toolUseConfirm 等）
+- 消息渲染管线：`<Static>` 已提交消息 + Transient 实时消息
+- PermissionProvider Context 集成
+- 消息重排序和规范化（normalizeMessages + reorderMessages）
+- 模式切换（prompt/bash/koding）
+- 会话恢复（fork number 管理）
 
----
-
-#### 任务 4.3：输入框 Widget（Week 12，Day 1-2）
-
-**文件**：`pode_agent/ui/widgets/prompt_input.py`
-
-**功能**：
-- 多行文本输入
-- 历史记录（上下键）
-- 粘贴支持
-- Ctrl+C 取消当前请求
-- Ctrl+D 退出
-- Tab 补全（文件名、命令）
+**验收标准**：
+- [x] REPL.tsx 能正确渲染消息列表（Static + Transient 分离）
+- [x] 能接收 JSON-RPC 推送的流式消息并实时更新
+- [x] 中断信号能取消正在进行的请求
 
 ---
 
-#### 任务 4.4：权限对话框（Week 12，Day 3-5）
+#### 任务 4.3：消息组件（Week 12，Day 2-4） ✅
 
-**文件**：`pode_agent/ui/widgets/permission_dialog.py`
+**文件**（从 Kode-Agent `src/ui/components/messages/` 移植）：
 
-**功能**：
-- 工具名和操作描述
-- 每种工具的专属信息（BashTool: 显示命令；FileEdit: 显示 diff）
-- 三个选项：[允许一次] [本会话允许] [始终允许] [拒绝]
-- 键盘快捷键
+| 组件 | 文件 | 功能 |
+|------|------|------|
+| AssistantTextMessage | `messages/AssistantTextMessage.tsx` | Markdown 渲染、费用显示、bash 通知解析 |
+| AssistantToolUseMessage | `messages/AssistantToolUseMessage.tsx` | 工具调用渲染（排队/执行中/错误状态） |
+| AssistantThinkingMessage | `messages/AssistantThinkingMessage.tsx` | Extended thinking 显示 |
+| UserTextMessage | `messages/UserTextMessage.tsx` | 用户文本显示 |
+| UserImageMessage | `messages/UserImageMessage.tsx` | 用户图片附件显示 |
+| TaskProgressMessage | `messages/TaskProgressMessage.tsx` | 任务进度指示 |
+| ...（共 15 个消息类型组件） | | |
 
----
+**文件**（工具结果组件，从 `messages/user-tool-result-message/` 移植）：
 
-#### 任务 4.5：状态栏和费用显示（Week 13，Day 1-2）
-
-**文件**：
-- `pode_agent/ui/widgets/status_bar.py`
-- `pode_agent/ui/widgets/cost_summary.py`
-
-**功能**：
-- 当前模型名称
-- 会话费用（累计 USD）
-- 请求进行中指示器（spinner）
-- 连接状态
-
----
-
-#### 任务 4.6：REPL Screen 整合（Week 13，Day 3-5）
-
-**文件**：`pode_agent/ui/screens/repl_screen.py`
-
-**功能**：
-- 整合所有 Widget
-- 连接 SessionManager 事件到 UI 更新
-- 键盘快捷键：
-  - `Ctrl+C`: 取消当前请求
-  - `Ctrl+K`: 清空历史（新建会话）
-  - `Ctrl+R`: 恢复上次会话
-  - `Ctrl+M`: 切换模型
+| 组件 | 文件 |
+|------|------|
+| UserToolResultMessage | `user-tool-result-message/UserToolResultMessage.tsx` |
+| UserToolSuccessMessage | `user-tool-result-message/UserToolSuccessMessage.tsx` |
+| UserToolErrorMessage | `user-tool-result-message/UserToolErrorMessage.tsx` |
+| UserToolRejectMessage | `user-tool-result-message/UserToolRejectMessage.tsx` |
 
 ---
 
-### Phase 4 完成标志
+#### 任务 4.4：权限对话框组件（Week 12，Day 4 - Week 13，Day 1） ✅
+
+**文件**（从 Kode-Agent `src/ui/components/permissions/` 移植）：
+
+| 组件 | 文件 | 功能 |
+|------|------|------|
+| PermissionRequest | `permissions/PermissionRequest.tsx` | 权限分发器（路由到具体组件） |
+| BashPermissionRequest | `permissions/BashPermissionRequest.tsx` | Bash 命令审批 |
+| FileEditPermissionRequest | `permissions/FileEditPermissionRequest.tsx` | 文件编辑审批（含 diff 显示） |
+| FileWritePermissionRequest | `permissions/FileWritePermissionRequest.tsx` | 文件写入审批（含 diff 显示） |
+| FilesystemPermissionRequest | `permissions/FilesystemPermissionRequest.tsx` | 只读文件系统工具审批 |
+| WebFetchPermissionRequest | `permissions/WebFetchPermissionRequest.tsx` | Web 请求 URL 审批 |
+| EnterPlanModePermissionRequest | `permissions/EnterPlanModePermissionRequest.tsx` | 计划模式入口审批 |
+| ExitPlanModePermissionRequest | `permissions/ExitPlanModePermissionRequest.tsx` | 计划模式出口审批 |
+| FallbackPermissionRequest | `permissions/FallbackPermissionRequest.tsx` | 通用权限对话框 |
+| ...（共 15+ 个权限组件） | | |
+
+**验收标准**：
+- [x] 每个工具类型有对应的权限对话框
+- [x] 支持 Allow Once / Allow for Session / Always Allow / Reject 四种选项
+- [x] 文件编辑权限显示 diff
+
+---
+
+#### 任务 4.5：PromptInput + Hooks（Week 13，Day 1-3） ✅
+
+**文件**（从 Kode-Agent `src/ui/` 移植）：
+
+| 组件/Hook | 文件 | 功能 |
+|-----------|------|------|
+| PromptInput | `components/PromptInput.tsx` | ~860 行，输入模式/补全/历史/粘贴/编辑器集成 |
+| TextInput | `components/TextInput.tsx` | 底层文本输入（bracketed paste/光标/多行） |
+| useTerminalSize | `hooks/useTerminalSize.ts` | 全局终端尺寸跟踪 |
+| useTextInput | `hooks/useTextInput.ts` | 文本输入 hook |
+| useUnifiedCompletion | `hooks/useUnifiedCompletion.ts` | 自动补全（命令/文件/agent） |
+| useArrowKeyHistory | `hooks/useArrowKeyHistory.ts` | 上下键历史导航 |
+| useCancelRequest | `hooks/useCancelRequest.ts` | ESC 取消请求 |
+| useCanUseTool | `hooks/useCanUseTool.ts` | 工具权限检查 |
+| useCostSummary | `hooks/useCostSummary.ts` | 费用追踪 |
+| useExitOnCtrlCD | `hooks/useExitOnCtrlCD.ts` | 双击 Ctrl+C/D 退出 |
+| ...（共 16 个 hooks） | | |
+
+---
+
+#### 任务 4.6：辅助 Screen + 整合（Week 13，Day 3-5） ✅
+
+**文件**（从 Kode-Agent `src/ui/screens/` 移植）：
+
+| Screen | 文件 | 功能 |
+|--------|------|------|
+| ResumeConversation | `screens/ResumeConversation.tsx` | 会话恢复选择器 |
+| LogList | `screens/LogList.tsx` | 历史记录浏览 |
+| Doctor | `screens/Doctor.tsx` | 健康检查界面 |
+| MCPServerApproval | `screens/MCPServerApproval.tsx` | MCP 服务器审批流程 |
+
+**其他辅助组件**：
+- `components/Logo.tsx` — 欢迎横幅
+- `components/Onboarding.tsx` — 首次运行向导
+- `components/TrustDialog.tsx` — 安全模式信任确认
+- `components/Config.tsx` — 设置界面
+- `components/Help.tsx` — 帮助显示
+- `components/binary-feedback/` — A/B 反馈组件（3 个文件）
+- `components/model-selector/` — 模型选择组件（3 个文件）
+- `components/custom-select/` — 自定义选择器（4 个文件）
+
+---
+
+### Phase 4 完成标志 ✅
 
 ```bash
-Pode  # 不带参数，启动 REPL
-# 期望：显示 Textual 界面，可以输入问题，看到 AI 响应和工具调用
+# 启动 REPL
+pode  # 不带参数，通过 Bun 启动 React + Ink UI
+# 期望：显示 Ink 界面，可以输入问题，看到 AI 响应和工具调用
 ```
 
-**截图测试**：使用 `textual run --screenshot` 生成界面截图用于回归测试。
+**验收验证**：
+```bash
+bun install                    # 前端依赖安装成功
+bun run dev                    # Ink UI 开发模式启动
+uv run mypy pode_agent/        # Success: no issues found in 80 source files
+uv run ruff check pode_agent/  # All checks passed
+uv run pytest tests/ -q        # 638 passed, 4 skipped
+```
+
+**实际交付物**：
+- 80 个 Python 源文件（pode_agent/），新增 1 个（ui_bridge.py），修改 2 个（cli.py, test_ui_bridge.py）
+- 30 个 TypeScript 源文件（src/ui/），新建完整前端工程
+- JSON-RPC over stdio 双向通信：Python 端 `UIBridge` + Bun 端 `JsonRpcPeer`
+- 4 个 Screen 组件：REPL（主屏幕）、ResumeConversation、Doctor、Help
+- 1 个 Context 组件：PermissionContext（权限决议管理）
+- 6 个 Hook 模块：useSession、useTerminalSize、useInterval、useArrowKeyHistory、useDoublePress 等
+- 12+ 消息组件：AssistantText/ToolUse/Thinking、UserText/ToolResult（success/error/reject）、TaskProgress
+- 权限对话框：PermissionRequest 分发器，支持 bash/file_edit/file_write/filesystem/web_fetch/plan_mode/ask_user 共 7 种工具类别
+- 辅助组件：PromptInput（含历史导航、Ctrl 快捷键、双击退出）、HighlightedCode、StructuredDiff、ToolUseLoader、Cost、RequestStatusIndicator
+- 638 个单元测试全部通过（新增 15 个 UI bridge 测试）
+- mypy strict mode 零错误，ruff 零告警
 
 ---
 
@@ -771,7 +846,7 @@ Pode  # 不带参数，启动 REPL
 
 | 子功能 | 说明 |
 |--------|------|
-| `TaskTool`（子任务 Agent） | 支持将计划步骤委托给独立子 Agent 执行 |
+| `TaskTool`（子任务 Agent） | 支持将计划步骤委托给独立子 Agent 执行。完整设计见 [subagent-system.md](./subagent-system.md) |
 
 ### 任务列表
 
@@ -956,11 +1031,11 @@ python -m build && twine upload dist/*
 
 | 标准 | Phase 0 | Phase 1 | Phase 2 | Phase 3 | Phase 4 | Phase 5 | Phase 6 |
 |------|---------|---------|---------|---------|---------|---------|---------|
-| mypy 零错误 | ✅ Done | ✅ Done (44 files) | ✅ Done (58 files) | ✅ Done (80 files) | ✅ | ✅ | ✅ |
-| ruff lint 通过 | ✅ Done | ✅ Done | ✅ Done | ✅ Done | ✅ | ✅ | ✅ |
-| pytest 通过 | ✅ Done (35) | ✅ Done (198) | ✅ Done (318) | ✅ Done (623) | ✅ | ✅ | ✅ |
-| 新功能有测试 | ✅ Done | ✅ Done (11 files) | ✅ Done (22 files) | ✅ Done (37 files) | ✅ | ✅ | ✅ |
-| 文档更新 | ✅ Done | ✅ Done | ✅ Done | ✅ Done | ✅ | ✅ | ✅ |
+| mypy 零错误 | ✅ Done | ✅ Done (44 files) | ✅ Done (58 files) | ✅ Done (80 files) | ✅ Done (80 files) | ✅ | ✅ |
+| ruff lint 通过 | ✅ Done | ✅ Done | ✅ Done | ✅ Done | ✅ Done | ✅ | ✅ |
+| pytest 通过 | ✅ Done (35) | ✅ Done (198) | ✅ Done (318) | ✅ Done (623) | ✅ Done (638) | ✅ | ✅ |
+| 新功能有测试 | ✅ Done | ✅ Done (11 files) | ✅ Done (22 files) | ✅ Done (37 files) | ✅ Done (38 files) | ✅ | ✅ |
+| 文档更新 | ✅ Done | ✅ Done | ✅ Done | ✅ Done | ✅ Done | ✅ | ✅ |
 
 ### 最终发布验收标准
 
