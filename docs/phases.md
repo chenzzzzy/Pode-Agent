@@ -181,6 +181,9 @@ pytest tests/           # 35 passed
 | `get_enabled_tools()`（基础版） | `core/tools/registry.py` | ✅ safe_mode 过滤已实现；permission_mode 过滤在 Phase 3 完善 |
 | 权限系统（`PermissionMode.PLAN` 规则） | `core/permissions/engine.py` | ✅ 框架就位，Plan Mode 硬拒绝规则已实现（Phase 3 的 EnterPlanModeTool 依赖它） |
 
+> 📖 **工具系统的目录结构、注册方式、权限耦合**详见 [tools-system.md](./tools-system.md)。  
+> **Phase 1 仅实现 `PermissionMode.PLAN` 的 enum 定义**，Plan Mode 完整骨架在 Phase 3 实现（见 [plan-mode.md — 分阶段实现建议](./plan-mode.md#分阶段实现建议)）。
+
 ### 任务列表
 
 #### 任务 1.1：权限系统（Week 2，Day 1-3） ✅
@@ -534,6 +537,9 @@ uv run pytest tests/ -q        # 318 passed, 1 skipped
 **负责 Agent**：工具实现 Agent（可以多个 Agent 并行）
 **实际完成日期**：2026-04-02
 
+> 📖 **工具系统完整规格**（注册/发现/权限/并发）详见 [tools-system.md](./tools-system.md)。  
+> **Plan Mode 骨架**（EnterPlanModeTool/ExitPlanModeTool/plan_state.py/System Prompt 注入）在本阶段实现，完整设计详见 [plan-mode.md](./plan-mode.md)。
+
 **Phase 3 同时完成的 Agentic Loop 升级**（对应 [agent-loop.md](./agent-loop.md)）：
 - `ToolUseQueue` 并发版本（`is_concurrency_safe` + `asyncio.gather` + sibling abort）
 - System Prompt 动态组装完整版（Plan Mode、Reminders 注入）
@@ -592,6 +598,17 @@ uv run pytest tests/ -q        # 318 passed, 1 skipped
 | TaskTool | `tools/agent/task.py` | 子任务管理（完整版在 Phase 5） |
 | SlashCommandTool | `tools/interaction/slash_command.py` | 执行自定义命令 |
 
+**Phase 3 Plan Mode 骨架实现清单**（对应 [plan-mode.md — 分阶段实现建议](./plan-mode.md#分阶段实现建议)）：
+
+| 组件 | 文件 | 说明 |
+|------|------|------|
+| Plan Mode 状态机 | `app/plan_state.py` | `enter/exit/is_enabled`、Slug 生成、计划文件路径 |
+| Plan Mode 工具 | `tools/agent/plan_mode.py` | `EnterPlanModeTool` / `ExitPlanModeTool` |
+| 权限引擎 Plan Mode 约束 | `core/permissions/engine.py` | `PermissionMode.PLAN` 下只允许只读工具 |
+| System Prompt 注入 | `app/query.py` `build_system_prompt()` | `get_plan_mode_system_prompt_additions()` |
+| canUseTool 拦截 | `app/query.py` | Plan Mode 下拦截非只读工具 |
+| `TURNS_BETWEEN_ATTACHMENTS` 节流 | `app/plan_state.py` | 避免 reminder 占用过多 token |
+
 #### Web 搜索提供商（Week 10）
 
 实现 WebSearchTool 的多个后端：
@@ -637,6 +654,14 @@ Pode "Help me refactor auth.py"
 # 期望：LLM 自动调用 EnterPlanModeTool，探索代码后输出 Plan；
 #       用户批准后进入执行阶段
 ```
+
+**Plan Mode 骨架验收标准**（完整规格见 [plan-mode.md](./plan-mode.md)）：
+- [ ] Agent 在面对复杂任务时主动调用 `EnterPlanModeTool`
+- [ ] Plan Mode 激活期间，`FileWriteTool`/`BashTool` 的写操作被拒绝，返回"permission denied"
+- [ ] `GlobTool`/`GrepTool`/`FileReadTool` 在 Plan Mode 下正常可用
+- [ ] `ExitPlanModeTool` 调用后恢复完整工具集
+- [ ] 计划文件正确写入 `~/.pode/plans/{slug}.md`
+- [ ] system-reminder 在 Plan Mode 激活时注入 LLM 上下文
 
 ---
 
