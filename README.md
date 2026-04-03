@@ -19,7 +19,7 @@
 
 ## 项目愿景
 
-**Pode-Agent** 是 Kode-Agent 的 Python 重写版本，目标是（Phase 0-4 已完成，638 测试通过）：
+**Pode-Agent** 是 Kode-Agent 的 Python 重写版本，目标是（Phase 0-5 已完成，786 测试通过）：
 
 - **开发者友好**：使用纯 Python 生态，降低贡献门槛（不需要 Bun/Node 环境）
 - **生产就绪**：完整保留原版所有功能，行为 1:1 对齐
@@ -39,14 +39,17 @@
 - [x] 实现基础会话管理（JSONL 日志）
 - [x] 实现权限系统基础
 
-### 中期目标（Phase 3-4，3-6 个月）— 部分完成
+### 中期目标（Phase 3-5，3-6 个月）— 已完成
 - [x] 实现完整终端 UI（React + Ink v5，深度复刻 Kode-Agent）
-- [ ] 实现 MCP 客户端/服务端协议
-- [ ] 实现插件系统（Skill Marketplace）
+- [x] 实现 MCP 客户端/服务端协议
+- [x] 实现插件系统（Skill Marketplace）
 - [x] 实现所有 24+ 个 Tool
 - [x] 实现上下文管理（项目感知）
+- [x] 实现 Hook 系统（4 个注入点 + Stop Hook 重入）
+- [x] 实现 SubAgent 系统（TaskTool、Agent 配置、ForkContext）
+- [x] 实现 ACP 协议（JSON-RPC over stdio）
 
-### 长期目标（Phase 5，6 个月以上）
+### 长期目标（Phase 6，6 个月以上）
 - [ ] 100% 功能对齐 Kode-Agent
 - [ ] Python 生态独有功能（Jupyter 集成增强、Python REPL）
 - [ ] 发布到 PyPI，提供完整文档
@@ -158,10 +161,11 @@ Phase 4 (Weeks 13-16): 终端 UI ✅ 已完成
   ├─ 权限对话框（7 种工具类别）
   └─ PromptInput（历史导航 + 快捷键 + 双击退出）
 
-Phase 5 (Weeks 17-20): 高级功能 ← 进行中
+Phase 5 (Weeks 17-20): 高级功能 ✅ 已完成
   ├─ MCP 客户端/服务端
   ├─ 插件系统 + Skill Marketplace
   ├─ Hook 系统（4 个注入点）
+  ├─ SubAgent 系统（TaskTool、Agent 加载、ForkContext）
   └─ ACP 协议
 
 Phase 6 (Weeks 21-24): 完善与发布

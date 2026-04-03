@@ -1,6 +1,6 @@
 # Pode-Agent 分阶段实施计划
 
-> 版本：1.5.0 | 状态：Phase 4 已完成 | 更新：2026-04-02
+> 版本：1.6.0 | 状态：Phase 5 已完成 | 更新：2026-04-03
 > **给 Code Agent 的说明**：请严格按照阶段顺序实施。每个阶段结束时运行对应验收测试，通过后才能进入下一阶段。
 
 ---
@@ -491,7 +491,7 @@ Hook 系统在 Phase 5 实现，Auto-compact 在 Phase 6 实现。
 - [x] `app/query.py`: `query()` / `query_core()` 递归主循环
 - [x] `app/query.py`: `ToolUseQueue`（串行版，Phase 3 升级为并发版）
 - [x] `app/query.py`: `check_permissions_and_call_tool()`（含权限检查，不含 Hook）
-- [ ] Hook 系统（Phase 5 实现）
+- [ ] Hook 系统（Phase 5 实现）✅ 已完成
 - [ ] Auto-compact（Phase 6 实现）
 
 ```bash
@@ -846,12 +846,13 @@ uv run pytest tests/ -q        # 638 passed, 4 skipped
 
 ---
 
-## Phase 5：MCP 与插件系统
+## Phase 5：MCP 与插件系统 ✅ 已完成
 
 **目标**：实现 MCP 客户端/服务端、插件系统、ACP 协议，以及 Agentic Loop 的 Hook 系统。  
 **时间**：Weeks 14-16（15 个工作日）  
 **依赖**：Phase 3 完成  
 **负责 Agent**：协议集成 Agent
+**实际完成日期**：2026-04-03
 
 **Phase 5 同时完成的 Agentic Loop 升级**（对应 [agent-loop.md](./agent-loop.md)）：
 - Hook 系统完整实现（4 个注入点：`run_user_prompt_submit_hooks`、`run_pre_tool_use_hooks`、`run_post_tool_use_hooks`、`run_stop_hooks`）
@@ -888,7 +889,7 @@ uv run pytest tests/ -q        # 638 passed, 4 skipped
 
 ### 任务列表
 
-#### 任务 5.1：MCP 客户端（Week 14）
+#### 任务 5.1：MCP 客户端（Week 14） ✅
 
 **文件**：`pode_agent/services/mcp/client.py`
 
@@ -901,13 +902,13 @@ uv run pytest tests/ -q        # 638 passed, 4 skipped
 - 读取资源
 
 **验收标准**：
-- [ ] 能连接 `mcp install npx @anthropic-ai/mcp-server-filesystem`
-- [ ] 通过 `Pode mcp list` 查看已配置的服务器
-- [ ] MCP 工具在 AI 对话中可以被调用
+- [x] 能连接 `mcp install npx @anthropic-ai/mcp-server-filesystem`
+- [x] 通过 `Pode mcp list` 查看已配置的服务器
+- [x] MCP 工具在 AI 对话中可以被调用
 
 ---
 
-#### 任务 5.2：MCP 服务端（Week 15，Day 1-2）
+#### 任务 5.2：MCP 服务端（Week 15，Day 1-2） ✅
 
 **文件**：`pode_agent/entrypoints/mcp_server.py`
 
@@ -917,11 +918,11 @@ uv run pytest tests/ -q        # 638 passed, 4 skipped
 - 实现 `CallTool` 处理器
 
 **验收标准**：
-- [ ] Claude Desktop 可以通过 MCP 协议使用 Pode 作为工具服务器
+- [x] Claude Desktop 可以通过 MCP 协议使用 Pode 作为工具服务器
 
 ---
 
-#### 任务 5.3：Skill Marketplace（Week 15，Day 3-5）
+#### 任务 5.3：Skill Marketplace（Week 15，Day 3-5） ✅
 
 **文件**：`pode_agent/services/plugins/marketplace.py`
 
@@ -936,7 +937,7 @@ uv run pytest tests/ -q        # 638 passed, 4 skipped
 
 ---
 
-#### 任务 5.4：自定义命令（Week 16，Day 1-2）
+#### 任务 5.4：自定义命令（Week 16，Day 1-2） ✅
 
 **文件**：`pode_agent/services/plugins/commands.py`
 
@@ -950,7 +951,7 @@ uv run pytest tests/ -q        # 638 passed, 4 skipped
 
 ---
 
-#### 任务 5.5：ACP 协议（Week 16，Day 3-5）
+#### 任务 5.5：ACP 协议（Week 16，Day 3-5） ✅
 
 **文件**：`pode_agent/entrypoints/acp_server.py`
 
@@ -958,6 +959,35 @@ uv run pytest tests/ -q        # 638 passed, 4 skipped
 - JSON-RPC over stdio
 - 暴露 `ask`、`run`、`tool` 等方法
 - 用于被其他 Agent 调用
+
+---
+
+### Phase 5 完成标志 ✅
+
+```bash
+# 已验证通过
+uv run mypy pode_agent/        # Success: no issues found in 100 source files
+uv run ruff check pode_agent/  # All checks passed
+uv run pytest tests/ -q        # 786 passed, 5 skipped
+```
+
+**实际交付物**：
+- 100 个 Python 源文件（pode_agent/），新增 20 个
+- Hook 系统（`services/hooks/`）：4 个注入点（UserPromptSubmit, PreToolUse, PostToolUse, Stop），命令 Hook（subprocess）+ Prompt Hook（LLM），Stop Hook 重入（MAX_STOP_HOOK_ATTEMPTS = 5）
+- MCP 客户端（`services/mcp/client.py`）：stdio/SSE/HTTP 传输，JSON-RPC 协议，工具发现 + 调用
+- MCP 工具包装（`services/mcp/tools.py`）：动态 Tool 子类生成，`mcp__{server}__{tool}` 命名
+- MCP 服务端（`entrypoints/mcp_server.py`）：暴露所有 Pode 工具为 MCP 工具
+- 插件系统（`services/plugins/`）：8 目录自定义命令发现、YAML frontmatter 解析、Marketplace CRUD、plugin CLI 子命令
+- SubAgent 系统（`services/agents/`）：Agent 加载 + 优先级合并、后台任务注册表、ForkContext、隔离子会话
+- ACP 服务端（`entrypoints/acp_server.py`）：JSON-RPC over stdio，session/new、session/prompt、session/cancel
+- 类型定义：`types/agent.py`（AgentConfig, SubAgentResult, BackgroundAgentTask）、`types/skill.py`（CustomCommandFrontmatter, ContextModifier, PluginManifest）
+- contextModifier 流：ToolOutput → ToolResult → QueryOptions 应用
+- Agentic Loop 升级：Hook 集成（query.py 4 个注入点）、Stop Hook 重入
+- ToolLoader 升级：`_load_mcp_tools()` + `_load_plugin_tools()`
+- CLI 集成：`pode plugin install/uninstall/enable/disable/list` 子命令
+- 4 个新测试文件：test_hooks（39）、test_mcp_client（32）、test_custom_commands（27）、test_subagent（18）
+- pytest-timeout（60s）防止测试挂起
+- mypy strict mode 零错误，ruff 零告警
 
 ---
 
@@ -1073,11 +1103,11 @@ python -m build && twine upload dist/*
 
 | 标准 | Phase 0 | Phase 1 | Phase 2 | Phase 3 | Phase 4 | Phase 5 | Phase 6 |
 |------|---------|---------|---------|---------|---------|---------|---------|
-| mypy 零错误 | ✅ Done | ✅ Done (44 files) | ✅ Done (58 files) | ✅ Done (80 files) | ✅ Done (80 files) | ✅ | ✅ |
-| ruff lint 通过 | ✅ Done | ✅ Done | ✅ Done | ✅ Done | ✅ Done | ✅ | ✅ |
-| pytest 通过 | ✅ Done (35) | ✅ Done (198) | ✅ Done (318) | ✅ Done (623) | ✅ Done (638) | ✅ | ✅ |
-| 新功能有测试 | ✅ Done | ✅ Done (11 files) | ✅ Done (22 files) | ✅ Done (37 files) | ✅ Done (38 files) | ✅ | ✅ |
-| 文档更新 | ✅ Done | ✅ Done | ✅ Done | ✅ Done | ✅ Done | ✅ | ✅ |
+| mypy 零错误 | ✅ Done | ✅ Done (44 files) | ✅ Done (58 files) | ✅ Done (80 files) | ✅ Done (80 files) | ✅ Done (100 files) | ✅ |
+| ruff lint 通过 | ✅ Done | ✅ Done | ✅ Done | ✅ Done | ✅ Done | ✅ Done | ✅ |
+| pytest 通过 | ✅ Done (35) | ✅ Done (198) | ✅ Done (318) | ✅ Done (623) | ✅ Done (638) | ✅ Done (786) | ✅ |
+| 新功能有测试 | ✅ Done | ✅ Done (11 files) | ✅ Done (22 files) | ✅ Done (37 files) | ✅ Done (38 files) | ✅ Done (42 files) | ✅ |
+| 文档更新 | ✅ Done | ✅ Done | ✅ Done | ✅ Done | ✅ Done | ✅ Done | ✅ |
 
 ### 最终发布验收标准
 
