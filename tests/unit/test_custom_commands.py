@@ -13,6 +13,7 @@ from pode_agent.services.plugins.commands import (
     _scan_directory,
     load_custom_commands,
     parse_frontmatter,
+    reload_custom_commands,
 )
 from pode_agent.services.plugins.marketplace import (
     _load_installed,
@@ -114,11 +115,17 @@ class TestScanDirectory:
 
 
 class TestLoadCustomCommands:
+    def setup_method(self) -> None:
+        """Clear cache before each test."""
+        reload_custom_commands()
+
     async def test_empty_with_no_dirs(self) -> None:
+        reload_custom_commands()
         cmds = await load_custom_commands()
         assert isinstance(cmds, list)
 
     async def test_loads_from_project(self, tmp_path: Path) -> None:
+        reload_custom_commands()
         cmds_dir = tmp_path / ".pode" / "commands"
         cmds_dir.mkdir(parents=True)
         (cmds_dir / "hello.md").write_text(
@@ -130,6 +137,7 @@ class TestLoadCustomCommands:
         assert "hello" in names
 
     async def test_deduplication(self, tmp_path: Path) -> None:
+        reload_custom_commands()
         # Project-level command
         cmds_dir = tmp_path / ".pode" / "commands"
         cmds_dir.mkdir(parents=True)

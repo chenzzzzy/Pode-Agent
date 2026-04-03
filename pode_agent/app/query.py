@@ -346,6 +346,7 @@ async def query_core(
 
     # 7. Execute tools via concurrent ToolUseQueue (Phase 3)
     tool_results: dict[str, str] = {}
+    collected_modifiers: list[Any] = []
     queue = ToolUseQueue(
         tool_uses=tool_use_blocks,
         tools=tools,
@@ -356,23 +357,32 @@ async def query_core(
     )
     async for event in queue.run():
         yield event
-        # Collect tool results
+        # Collect tool results and context modifiers
         if event.type == SessionEventType.TOOL_RESULT and event.data:
             tool_results[event.data.get("tool_use_id", "")] = event.data.get(
                 "result", ""
             )
+            if event.data.get("context_modifier"):
+                collected_modifiers.append(event.data["context_modifier"])
 
     # 8. Build tool result message
     result_msg = build_tool_result_message(tool_use_blocks, tool_results)
     session.save_message(result_msg)
 
-    # 9. Recurse with updated messages (Phase 5: propagate hook_state)
+    # 8b. Apply context modifiers from tool results (Phase 5: contextModifier)
+    updated_options = options
+    for modifier_data in collected_modifiers:
+        from pode_agent.types.skill import ContextModifier
+        modifier = ContextModifier.model_validate(modifier_data)
+        updated_options = modifier.apply_to_options(updated_options)
+
+    # 9. Recurse with updated messages (Phase 5: propagate hook_state + context_modifier)
     async for event in query_core(
         messages=session.get_messages(),
         system_prompt=system_prompt,
         tools=tools,
         session=session,
-        options=options,
+        options=updated_options,
         _round=_round + 1,
         _hook_state=hook_state,
     ):
@@ -535,6 +545,8 @@ async def _check_permissions_and_call_tool(
                 "tool_name": tool_use.name,
                 "result": result_text,
                 "is_error": False,
+                "context_modifier": result.context_modifier,
+                "new_messages": result.new_messages,
             },
         )
 

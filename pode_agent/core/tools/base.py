@@ -38,6 +38,7 @@ class ToolOutput(BaseModel):
     result_for_assistant: str | list[Any] | None = None
     new_messages: list[Any] | None = None
     context_modifier: ContextModifier | None = None
+    is_error: bool = False
 
 
 class ToolOptions(BaseModel):

@@ -333,7 +333,9 @@ def plugin_disable(
 
 
 @plugin_app.command("list")
-def plugin_list() -> None:
+def plugin_list(
+    scope: str = typer.Option("user", "--scope", help="Filter by scope: user or project"),
+) -> None:
     """List all installed plugins."""
     from pode_agent.services.plugins.marketplace import list_installed_plugins
 
@@ -344,5 +346,91 @@ def plugin_list() -> None:
 
     for p in plugins:
         status = "enabled" if p.enabled else "disabled"
-        typer.echo(f"  {p.name} [{status}] from {p.source}")
+        typer.echo(f"  {p.name} [{status}] ({p.install_mode}) from {p.source}")
+
+
+@plugin_app.command("refresh")
+def plugin_refresh() -> None:
+    """Refresh skill and command cache."""
+    from pode_agent.services.plugins.commands import reload_custom_commands
+
+    reload_custom_commands()
+    typer.echo("Cache refreshed.")
+
+
+# --- Marketplace subcommand group ---
+
+marketplace_app = typer.Typer(
+    name="marketplace",
+    help="Manage marketplace sources.",
+    no_args_is_help=True,
+)
+plugin_app.add_typer(marketplace_app, name="marketplace")
+
+
+@marketplace_app.command("add")
+def marketplace_add(
+    source: str = typer.Argument(
+        help="Marketplace source (e.g. github:owner/repo, file:./path)",
+    ),
+    name: str | None = typer.Option(None, "--name", help="Override marketplace name"),
+    ref: str = typer.Option("main", "--ref", help="Git ref to use"),
+) -> None:
+    """Add a marketplace source."""
+    from pode_agent.services.plugins.marketplace import add_marketplace
+
+    try:
+        entry = add_marketplace(source, name=name, ref=ref)
+        src_info = entry.get("source", {}).get("url") or source
+        typer.echo(f"Added marketplace: {src_info}")
+    except Exception as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=1) from None
+
+
+@marketplace_app.command("remove")
+def marketplace_remove(
+    name: str = typer.Argument(help="Marketplace name to remove"),
+) -> None:
+    """Remove a marketplace source."""
+    from pode_agent.services.plugins.marketplace import remove_marketplace
+
+    try:
+        remove_marketplace(name)
+        typer.echo(f"Removed marketplace: {name}")
+    except KeyError as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=1) from None
+
+
+@marketplace_app.command("list")
+def marketplace_list() -> None:
+    """List all known marketplaces."""
+    from pode_agent.services.plugins.marketplace import list_marketplaces
+
+    marketplaces = list_marketplaces()
+    if not marketplaces:
+        typer.echo("No marketplaces configured.")
+        return
+
+    for mkt in marketplaces:
+        source = mkt.get("source", {})
+        src_type = source.get("type", "unknown")
+        src_url = source.get("url") or source.get("path", "")
+        typer.echo(f"  {mkt['name']} ({src_type}:{src_url})")
+
+
+@marketplace_app.command("update")
+def marketplace_update(
+    name: str = typer.Argument(help="Marketplace name to update"),
+) -> None:
+    """Update marketplace cache."""
+    from pode_agent.services.plugins.marketplace import update_marketplace
+
+    try:
+        update_marketplace(name)
+        typer.echo(f"Updated marketplace: {name}")
+    except KeyError as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=1) from None
 
