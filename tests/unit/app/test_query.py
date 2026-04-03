@@ -465,9 +465,9 @@ class TestPermissionInteraction:
 
         mock_tool.call = mock_call
 
-        # Round 1: tool_use response; Round 2: text
+        # Round 1: tool_use response with dangerous command; Round 2: text
         mock_fn = _make_mock_query_llm([
-            _tool_use_response("tu_001", "bash", {"command": "ls"}),
+            _tool_use_response("tu_001", "bash", {"command": "npm install"}),
             _text_response("Done!"),
         ])
 

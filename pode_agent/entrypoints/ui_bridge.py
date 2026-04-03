@@ -382,6 +382,9 @@ class UIBridge:
 
         logger.info("UI bridge started, waiting for JSON-RPC")
 
+        # Track background tasks so they can be cleaned up
+        pending_tasks: set[asyncio.Task[None]] = set()
+
         try:
             while True:
                 line = await reader.readline()
@@ -391,13 +394,35 @@ class UIBridge:
                 if not line_str:
                     continue
 
-                response = await server.handle_line(line_str)
-                if response:
-                    await self._write_line_async(response)
+                # Dispatch concurrently so long-running handlers (e.g. submit)
+                # don't block the read loop. This prevents deadlocks when
+                # _handle_submit waits for permission and the UI sends
+                # resolve_permission on the same connection.
+                task = asyncio.create_task(
+                    self._dispatch_line(server, line_str)
+                )
+                pending_tasks.add(task)
+                task.add_done_callback(pending_tasks.discard)
         except asyncio.CancelledError:
             pass
         finally:
+            # Cancel any still-running dispatch tasks
+            for t in pending_tasks:
+                t.cancel()
+            if pending_tasks:
+                await asyncio.gather(*pending_tasks, return_exceptions=True)
             logger.info("UI bridge shutting down")
+
+    async def _dispatch_line(
+        self, server: JsonRpcServer, line_str: str
+    ) -> None:
+        """Dispatch a single JSON-RPC line and write back the response."""
+        try:
+            response = await server.handle_line(line_str)
+            if response:
+                await self._write_line_async(response)
+        except Exception:
+            logger.exception("Error dispatching JSON-RPC line")
 
     async def _ensure_session(self) -> SessionManager:
         """Lazy-initialize SessionManager on first use."""

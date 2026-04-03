@@ -96,7 +96,11 @@ class PermissionEngine:
         """Apply tool-specific safety rules. Returns None to fall through."""
         if tool_name == "bash":
             if tool_input is not None:
-                command = getattr(tool_input, "command", None)
+                # tool_input may be a dict (from JSON) or a Pydantic model
+                if isinstance(tool_input, dict):
+                    command = tool_input.get("command")
+                else:
+                    command = getattr(tool_input, "command", None)
                 if command is not None and is_safe_bash_command(command):
                     return PermissionResult.ALLOWED
             return PermissionResult.NEEDS_PROMPT

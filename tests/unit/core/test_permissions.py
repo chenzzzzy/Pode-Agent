@@ -315,6 +315,22 @@ class TestPermissionEngine:
         )
         assert result is PermissionResult.ALLOWED
 
+    def test_safe_bash_dict_input_auto_allowed(self) -> None:
+        """Tool input from JSON is a dict — must also be recognized as safe."""
+        ctx = PermissionContext()
+        result = self.engine.has_permissions(
+            "bash", {"command": "pwd"}, context=ctx,
+        )
+        assert result is PermissionResult.ALLOWED
+
+    def test_dangerous_bash_dict_input_needs_prompt(self) -> None:
+        """Dangerous command in dict form must still require permission."""
+        ctx = PermissionContext()
+        result = self.engine.has_permissions(
+            "bash", {"command": "rm -rf /"}, context=ctx,
+        )
+        assert result is PermissionResult.NEEDS_PROMPT
+
     def test_dangerous_bash_needs_prompt(self) -> None:
         class _FakeInput:
             command = "npm install"
