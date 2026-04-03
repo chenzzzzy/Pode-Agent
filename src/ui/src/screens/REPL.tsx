@@ -33,9 +33,10 @@ export interface REPLProps {
   initialPrompt?: string
   verbose?: boolean
   safeMode?: boolean
+  onNavigate?: (screen: string) => void
 }
 
-export function REPL({ peer, theme, initialPrompt, verbose, safeMode }: REPLProps) {
+export function REPL({ peer, theme, initialPrompt, verbose, safeMode, onNavigate }: REPLProps) {
   const session = useSession(peer)
   const {
     messages,
@@ -93,10 +94,18 @@ export function REPL({ peer, theme, initialPrompt, verbose, safeMode }: REPLProp
   const handleSubmit = useCallback(
     (text: string) => {
       if (!text.trim()) return
+
+      // Handle local slash commands before sending to backend
+      const trimmed = text.trim().toLowerCase()
+      if (trimmed === "/doctor" && onNavigate) {
+        onNavigate("doctor")
+        return
+      }
+
       setShowWelcome(false)
       void submit(text)
     },
-    [submit],
+    [submit, onNavigate],
   )
 
   const handlePermissionDecision = useCallback(
@@ -175,6 +184,7 @@ export function REPL({ peer, theme, initialPrompt, verbose, safeMode }: REPLProp
           theme={theme}
           isLoading={isLoading}
           onSubmit={handleSubmit}
+          onExit={exit}
         />
       )}
     </Box>

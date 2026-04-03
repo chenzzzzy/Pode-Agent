@@ -88,6 +88,23 @@ export interface ErrorMessage extends BaseMessage {
   hint?: string
 }
 
+// --- SubAgent messages ---
+
+export type SubAgentStatus = "started" | "running" | "completed" | "failed"
+
+export interface SubAgentMessage extends BaseMessage {
+  role: "assistant"
+  type: "sub_agent"
+  agentId: string
+  subagentType: string
+  description: string
+  status: SubAgentStatus
+  resultText?: string
+  error?: string
+  toolUseCount?: number
+  durationMs?: number
+}
+
 // --- Union types ---
 
 export type Message =
@@ -98,6 +115,7 @@ export type Message =
   | UserToolResultMessage
   | TaskProgressMessage
   | ErrorMessage
+  | SubAgentMessage
 
 // --- Permission types ---
 

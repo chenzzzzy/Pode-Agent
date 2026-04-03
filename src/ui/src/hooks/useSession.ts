@@ -19,6 +19,7 @@ import type {
   UserToolResultMessage,
   TaskProgressMessage,
   ErrorMessage,
+  SubAgentMessage,
   PlanStepState,
   ToolUseConfirm,
   PermissionDecision,
@@ -343,6 +344,121 @@ export function useSession(peer: JsonRpcPeer) {
         timestamp: Date.now(),
       }
       setMessages((prev) => [...prev, msg])
+    })
+
+    // SubAgent lifecycle notifications
+    peer.registerMethod("sub_agent/started", (params: unknown) => {
+      const p = params as {
+        agent_id: string
+        subagent_type: string
+        description: string
+        tool_use_id: string
+      }
+      const msg: SubAgentMessage = {
+        id: makeId(),
+        role: "assistant",
+        type: "sub_agent",
+        agentId: p.agent_id,
+        subagentType: p.subagent_type,
+        description: p.description,
+        status: "started",
+        timestamp: Date.now(),
+      }
+      setMessages((prev) => [...prev, msg])
+    })
+
+    peer.registerMethod("sub_agent/progress", (params: unknown) => {
+      const p = params as {
+        agent_id: string
+        subagent_type: string
+        description: string
+        progress_text: string
+      }
+      // Update existing SubAgent message in-place
+      setMessages((prev) => {
+        const idx = prev.findLastIndex(
+          (m) => m.type === "sub_agent" && (m as SubAgentMessage).agentId === p.agent_id,
+        )
+        if (idx >= 0) {
+          const updated = [...prev]
+          updated[idx] = {
+            ...updated[idx],
+            description: p.progress_text || p.description,
+            status: "running",
+          } as SubAgentMessage
+          return updated
+        }
+        return prev
+      })
+    })
+
+    peer.registerMethod("sub_agent/completed", (params: unknown) => {
+      const p = params as {
+        agent_id: string
+        subagent_type: string
+        description: string
+        result_text: string
+        tool_use_count?: number
+        duration_ms?: number
+        tool_use_id: string
+      }
+      // Update existing SubAgent message to completed state
+      setMessages((prev) => {
+        const idx = prev.findLastIndex(
+          (m) => m.type === "sub_agent" && (m as SubAgentMessage).agentId === p.agent_id,
+        )
+        const completedMsg: SubAgentMessage = {
+          id: idx >= 0 ? prev[idx].id : makeId(),
+          role: "assistant",
+          type: "sub_agent",
+          agentId: p.agent_id,
+          subagentType: p.subagent_type,
+          description: p.description,
+          status: "completed",
+          resultText: p.result_text,
+          toolUseCount: p.tool_use_count,
+          durationMs: p.duration_ms,
+          timestamp: Date.now(),
+        }
+        if (idx >= 0) {
+          const updated = [...prev]
+          updated[idx] = completedMsg
+          return updated
+        }
+        return [...prev, completedMsg]
+      })
+    })
+
+    peer.registerMethod("sub_agent/failed", (params: unknown) => {
+      const p = params as {
+        agent_id: string
+        subagent_type: string
+        description: string
+        error: string
+        tool_use_id: string
+      }
+      setMessages((prev) => {
+        const idx = prev.findLastIndex(
+          (m) => m.type === "sub_agent" && (m as SubAgentMessage).agentId === p.agent_id,
+        )
+        const failedMsg: SubAgentMessage = {
+          id: idx >= 0 ? prev[idx].id : makeId(),
+          role: "assistant",
+          type: "sub_agent",
+          agentId: p.agent_id,
+          subagentType: p.subagent_type,
+          description: p.description,
+          status: "failed",
+          error: p.error,
+          timestamp: Date.now(),
+        }
+        if (idx >= 0) {
+          const updated = [...prev]
+          updated[idx] = failedMsg
+          return updated
+        }
+        return [...prev, failedMsg]
+      })
     })
   }, [peer])
 

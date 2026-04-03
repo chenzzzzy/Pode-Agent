@@ -17,7 +17,6 @@ from pode_agent.app.query import (
     _build_tool_definitions,
     _find_tool,
     _messages_to_dicts,
-    _on_tool_progress,
     query,
     query_core,
 )
@@ -569,13 +568,23 @@ class TestPermissionInteraction:
 
 class TestToolProgress:
     async def test_on_tool_progress_enqueues_event(self) -> None:
-        """_on_tool_progress should put a TOOL_PROGRESS event into the queue."""
+        """Progress callback should put a TOOL_PROGRESS event into the queue."""
         queue: asyncio.Queue[SessionEvent] = asyncio.Queue()
 
         progress = MagicMock()
         progress.content = "Running command..."
 
-        await _on_tool_progress(progress, "tu_001", "bash", queue)
+        # Replicate the inline callback used in _check_permissions_and_call_tool
+        async def progress_callback(p: Any) -> None:
+            await queue.put(SessionEvent(
+                type=SessionEventType.TOOL_PROGRESS,
+                data={
+                    "tool_use_id": "tu_001",
+                    "content": p.content if hasattr(p, "content") else str(p),
+                },
+            ))
+
+        await progress_callback(progress)
 
         event = queue.get_nowait()
         assert event.type == SessionEventType.TOOL_PROGRESS

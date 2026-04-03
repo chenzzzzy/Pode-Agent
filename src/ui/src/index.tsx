@@ -2,7 +2,12 @@
  * Pode-Agent UI — Ink entry point.
  *
  * Bootstraps the JSON-RPC client, connects to the Python backend
- * via TCP socket (port from PODE_RPC_PORT env), and renders the REPL screen.
+ * via TCP socket (port from PODE_RPC_PORT env), and renders screens.
+ *
+ * Screen routing:
+ *   - "repl"   → Main REPL chat interface
+ *   - "doctor" → Health check diagnostics
+ *   - "resume" → Resume past conversation
  *
  * Architecture:
  *
@@ -11,11 +16,12 @@
  *   Bun's stdin/stdout remain connected to TTY for user input
  */
 
-import React from "react"
-import { render, Box, Text } from "ink"
+import React, { useState, useCallback, useEffect } from "react"
+import { render } from "ink"
 import { JsonRpcPeer } from "./rpc/client.js"
 import { SocketTransport } from "./rpc/transport.js"
 import { REPL } from "./screens/REPL.js"
+import { Doctor } from "./screens/Doctor.js"
 import { getTheme } from "./theme.js"
 
 // --- Check TTY support before rendering ---
@@ -46,17 +52,39 @@ if (!port) {
 // Create socket transport
 const transport = new SocketTransport(peer, { port })
 
-// --- App ---
+// --- App with screen routing ---
+
+type Screen = "repl" | "doctor"
 
 function App() {
   const theme = getTheme()
+  const [screen, setScreen] = useState<Screen>("repl")
 
-  return (
-    <REPL
-      peer={peer}
-      theme={theme}
-    />
-  )
+  // Register backend-triggered navigation
+  useEffect(() => {
+    peer.registerMethod("ui/navigate", (params: unknown) => {
+      const p = params as { screen: string }
+      if (p.screen === "doctor" || p.screen === "repl") {
+        setScreen(p.screen as Screen)
+      }
+    })
+  }, [])
+
+  const handleBack = useCallback(() => setScreen("repl"), [])
+
+  switch (screen) {
+    case "doctor":
+      return <Doctor peer={peer} theme={theme} onClose={handleBack} />
+    case "repl":
+    default:
+      return (
+        <REPL
+          peer={peer}
+          theme={theme}
+          onNavigate={(s) => setScreen(s as Screen)}
+        />
+      )
+  }
 }
 
 // --- Bootstrap ---

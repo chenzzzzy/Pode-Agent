@@ -19,7 +19,26 @@ export interface PermissionRequestProps {
 }
 
 // Tool name → category mapping for routing to specialized displays
+// Python backend sends snake_case tool names (e.g., "bash", "file_edit")
 const TOOL_PERMISSION_MAP: Record<string, string> = {
+  bash: "bash",
+  file_edit: "file_edit",
+  file_write: "file_write",
+  file_read: "filesystem",
+  glob: "filesystem",
+  grep: "filesystem",
+  notebook_read: "filesystem",
+  notebook_edit: "filesystem",
+  multi_edit: "file_edit",
+  web_fetch: "web_fetch",
+  web_search: "web_fetch",
+  enter_plan_mode: "plan_mode",
+  exit_plan_mode: "plan_mode",
+  ask_user_question: "ask_user",
+  slash_command: "slash_command",
+  skill: "skill",
+  ls: "filesystem",
+  // Legacy PascalCase fallbacks (in case some providers use them)
   Bash: "bash",
   FileEdit: "file_edit",
   FileWrite: "file_write",
@@ -100,8 +119,8 @@ function ToolSpecificContent({
       return (
         <FileEditContent
           filePath={String(input.file_path ?? input.path ?? "")}
-          oldString={input.old_string ? String(input.old_string) : undefined}
-          newString={input.new_string ? String(input.new_string) : undefined}
+          oldString={input.old_str ? String(input.old_str) : (input.old_string ? String(input.old_string) : undefined)}
+          newString={input.new_str ? String(input.new_str) : (input.new_string ? String(input.new_string) : undefined)}
           theme={theme}
         />
       )
@@ -140,7 +159,7 @@ function ToolSpecificContent({
         <Box marginTop={0}>
           <Text color={theme.planMode}>
             {" "}
-            {confirm.toolName === "EnterPlanMode"
+            {confirm.toolName === "enter_plan_mode" || confirm.toolName === "EnterPlanMode"
               ? "Enter Plan Mode — AI will create a plan before executing"
               : "Exit Plan Mode — Plan complete"}
           </Text>
@@ -150,7 +169,7 @@ function ToolSpecificContent({
     case "ask_user":
       return (
         <Box marginTop={0} flexDirection="column">
-          {input.question && (
+          {Boolean(input.question) && (
             <Text>
               {" "}
               Question: <Text color={theme.text}>{String(input.question)}</Text>

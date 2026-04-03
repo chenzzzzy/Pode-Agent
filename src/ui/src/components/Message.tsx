@@ -18,6 +18,7 @@ import type {
   UserToolResultMessage,
   TaskProgressMessage,
   ErrorMessage,
+  SubAgentMessage,
 } from "../types.js"
 
 export interface MessageProps {
@@ -177,6 +178,48 @@ function AssistantMessageRenderer({
               <Text color={theme.warning} bold>
                 💡 {m.hint}
               </Text>
+            </Box>
+          )}
+        </Box>
+      )
+    }
+    case "sub_agent": {
+      const m = message as SubAgentMessage
+      const statusIcon =
+        m.status === "completed"
+          ? "✓"
+          : m.status === "failed"
+            ? "✗"
+            : m.status === "running"
+              ? "◉"
+              : "▸"
+      const statusColor =
+        m.status === "completed"
+          ? theme.success
+          : m.status === "failed"
+            ? theme.error
+            : theme.tool
+      return (
+        <Box flexDirection="column" marginTop={1} paddingLeft={2}>
+          <Text color={statusColor}>
+            {statusIcon} SubAgent ({m.subagentType}): {m.description}
+          </Text>
+          {m.status === "completed" && m.resultText && (
+            <Box paddingLeft={2}>
+              <Text color={theme.muted}>{truncate(m.resultText, 200)}</Text>
+            </Box>
+          )}
+          {m.status === "completed" && m.durationMs !== undefined && (
+            <Box paddingLeft={2}>
+              <Text color={theme.muted}>
+                Completed in {(m.durationMs / 1000).toFixed(1)}s
+                {m.toolUseCount ? `, ${m.toolUseCount} tool calls` : ""}
+              </Text>
+            </Box>
+          )}
+          {m.status === "failed" && m.error && (
+            <Box paddingLeft={2}>
+              <Text color={theme.error}>{m.error}</Text>
             </Box>
           )}
         </Box>

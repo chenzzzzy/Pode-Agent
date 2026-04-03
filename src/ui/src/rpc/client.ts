@@ -214,7 +214,7 @@ export class JsonRpcPeer {
     const timeoutMs = args.timeoutMs
 
     const p = new Promise<T>((resolve, reject) => {
-      const entry: PendingEntry = { resolve, reject, abort: args.signal }
+      const entry: PendingEntry = { resolve: resolve as (value: unknown) => void, reject, abort: args.signal }
 
       if (timeoutMs && Number.isFinite(timeoutMs) && timeoutMs > 0) {
         entry.timeoutId = setTimeout(() => {

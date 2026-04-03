@@ -19,6 +19,7 @@ import React, { useCallback, useRef, useState, useEffect } from "react"
 import { Box, Text, useInput } from "ink"
 import figures from "figures"
 import type { Theme } from "../types.js"
+import { useArrowKeyHistory } from "../hooks/useArrowKeyHistory.js"
 
 export interface PromptInputProps {
   theme: Theme
@@ -42,6 +43,9 @@ export function PromptInput({ theme, isLoading, onSubmit, onExit }: PromptInputP
   // pendingSubmit: set by Enter key, consumed by effect to avoid setState-in-render
   const [pendingSubmit, setPendingSubmit] = useState<string | null>(null)
 
+  // Arrow key history navigation
+  const { onHistoryUp, onHistoryDown, resetHistory } = useArrowKeyHistory(input.value)
+
   const handleSubmit = useCallback(
     (text: string) => {
       if (!text.trim()) return
@@ -56,6 +60,7 @@ export function PromptInput({ theme, isLoading, onSubmit, onExit }: PromptInputP
 
       onSubmit(text)
       setInput({ value: "", cursor: 0 })
+      resetHistory()
     },
     [onSubmit],
   )
@@ -176,13 +181,23 @@ export function PromptInput({ theme, isLoading, onSubmit, onExit }: PromptInputP
       return
     }
 
-    // --- Up/Down arrows: jump to start/end of line ---
+    // --- Up/Down arrows: history navigation ---
     if (key.upArrow) {
-      setInput((prev) => ({ ...prev, cursor: 0 }))
+      const reversedHistory = [...historyRef.current].reverse()
+      const historyEntry = onHistoryUp(reversedHistory)
+      if (historyEntry !== null) {
+        setInput({ value: historyEntry, cursor: historyEntry.length })
+      }
       return
     }
     if (key.downArrow) {
-      setInput((prev) => ({ ...prev, cursor: prev.value.length }))
+      const reversedHistory = [...historyRef.current].reverse()
+      const historyEntry = onHistoryDown(reversedHistory)
+      if (historyEntry !== null) {
+        setInput({ value: historyEntry, cursor: historyEntry.length })
+      } else {
+        setInput({ value: "", cursor: 0 })
+      }
       return
     }
 

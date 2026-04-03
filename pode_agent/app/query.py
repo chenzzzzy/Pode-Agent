@@ -481,7 +481,11 @@ async def _check_permissions_and_call_tool(
     """
     yield SessionEvent(
         type=SessionEventType.TOOL_USE_START,
-        data={"tool_name": tool_use.name, "tool_use_id": tool_use.id},
+        data={
+            "tool_name": tool_use.name,
+            "tool_use_id": tool_use.id,
+            "tool_input": tool_use.input,
+        },
     )
 
     # 1. Find tool
@@ -565,25 +569,46 @@ async def _check_permissions_and_call_tool(
         )
         return
 
-    # 3. Execute tool
+    # 3. Execute tool with real-time progress streaming
     try:
         tool_input_model = await _build_tool_input(tool, tool_use.input)
         tool_context = _build_tool_context(session, options, tool_use.id)
 
-        # Queue for progress events from callback
+        # Stream progress events in real-time by running tool in a task
         progress_queue: asyncio.Queue[SessionEvent] = asyncio.Queue()
 
-        result = await collect_tool_result(
-            tool, tool_input_model, tool_context,
-            on_progress=lambda p: _on_tool_progress(
-                p, tool_use.id, tool_use.name, progress_queue,
-            ),
+        async def _progress_callback(p: Any) -> None:
+            await progress_queue.put(SessionEvent(
+                type=SessionEventType.TOOL_PROGRESS,
+                data={
+                    "tool_use_id": tool_use.id,
+                    "content": p.content if hasattr(p, "content") else str(p),
+                },
+            ))
+
+        tool_task = asyncio.create_task(
+            collect_tool_result(
+                tool, tool_input_model, tool_context,
+                on_progress=_progress_callback,
+            )
         )
 
-        # Yield any progress events that accumulated during execution
-        while not progress_queue.empty():
-            yield await progress_queue.get()
+        # Yield progress events as they arrive until tool completes
+        while not tool_task.done():
+            try:
+                event = await asyncio.wait_for(progress_queue.get(), timeout=0.1)
+                yield event
+            except TimeoutError:
+                continue
+            except asyncio.CancelledError:
+                tool_task.cancel()
+                raise
 
+        # Drain any remaining progress events
+        while not progress_queue.empty():
+            yield progress_queue.get_nowait()
+
+        result = tool_task.result()
         result_text = result.result_for_assistant or str(result.data or "")
 
         yield SessionEvent(
@@ -602,6 +627,11 @@ async def _check_permissions_and_call_tool(
         if tool_use.name == "Task" and isinstance(result.data, dict):
             for sub_event in _emit_subagent_events(tool_use.id, result.data):
                 yield sub_event
+
+        # 3c. Emit Plan Mode lifecycle events
+        if isinstance(result.data, dict):
+            for plan_event in _emit_plan_events(tool_use.name, result.data, session):
+                yield plan_event
 
         # 4. PostToolUse hooks (Phase 5)
         if hook_state is not None:
@@ -743,22 +773,6 @@ def _build_tool_context(
     )
 
 
-async def _on_tool_progress(
-    progress: Any,
-    tool_use_id: str,
-    tool_name: str,
-    queue: asyncio.Queue[SessionEvent],
-) -> None:
-    """Enqueue TOOL_PROGRESS event from tool callback."""
-    await queue.put(SessionEvent(
-        type=SessionEventType.TOOL_PROGRESS,
-        data={
-            "tool_use_id": tool_use_id,
-            "content": progress.content if hasattr(progress, "content") else str(progress),
-        },
-    ))
-
-
 async def _wait_for_permission_decision(
     session: Any,
     tool_name: str,
@@ -841,4 +855,68 @@ def _emit_subagent_events(
                 "tool_use_id": tool_use_id,
             },
         ))
+    return events
+
+
+def _emit_plan_events(
+    tool_name: str,
+    data: dict[str, Any],
+    session: Any,
+) -> list[SessionEvent]:
+    """Emit Plan Mode lifecycle events from plan tool results.
+
+    Translates enter_plan_mode / exit_plan_mode tool outputs
+    into PLAN_* SessionEvents that the UI can consume.
+    """
+    events: list[SessionEvent] = []
+
+    if tool_name == "enter_plan_mode":
+        objective = data.get("objective", "")
+        # Mark session as in plan mode
+        if hasattr(session, "_plan_mode_active"):
+            session._plan_mode_active = True
+            session._plan_objective = objective
+        events.append(SessionEvent(
+            type=SessionEventType.PLAN_CREATED,
+            data={
+                "plan_id": f"plan_{id(session)}",
+                "objective": objective,
+                "steps_count": 0,
+            },
+        ))
+
+    elif tool_name == "exit_plan_mode":
+        plan_event = data.get("event", "")
+        plan_data = data.get("plan", data)
+
+        if plan_event == "plan_created" or "steps" in plan_data:
+            steps = plan_data.get("steps", [])
+            plan_id = f"plan_{id(session)}"
+            # Emit updated plan with steps
+            events.append(SessionEvent(
+                type=SessionEventType.PLAN_CREATED,
+                data={
+                    "plan_id": plan_id,
+                    "objective": plan_data.get("objective", ""),
+                    "steps_count": len(steps),
+                },
+            ))
+            # Auto-approve (plan was submitted by exiting plan mode)
+            events.append(SessionEvent(
+                type=SessionEventType.PLAN_APPROVED,
+                data={"plan_id": plan_id},
+            ))
+        elif plan_event == "plan_cancelled":
+            events.append(SessionEvent(
+                type=SessionEventType.PLAN_CANCELLED,
+                data={
+                    "plan_id": f"plan_{id(session)}",
+                    "reason": data.get("reason", "User cancelled"),
+                },
+            ))
+
+        # Clear plan mode on session
+        if hasattr(session, "_plan_mode_active"):
+            session._plan_mode_active = False
+
     return events

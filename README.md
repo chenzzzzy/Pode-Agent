@@ -19,7 +19,7 @@
 
 ## 项目愿景
 
-**Pode-Agent** 是 Kode-Agent 的 Python 重写版本，目标是（Phase 0-5 已完成，798 测试通过）：
+**Pode-Agent** 是 Kode-Agent 的 Python 重写版本，目标是（Phase 0-5 已完成，789+ 测试通过）：
 
 - **开发者友好**：使用纯 Python 生态，降低贡献门槛（不需要 Bun/Node 环境）
 - **生产就绪**：完整保留原版所有功能，行为 1:1 对齐
