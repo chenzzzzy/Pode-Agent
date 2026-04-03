@@ -258,3 +258,91 @@ if __name__ == "__main__":
 def run() -> None:
     """Console script entry point."""
     app()
+
+
+# --- Plugin subcommand group (Phase 5) ---
+
+plugin_app = typer.Typer(
+    name="plugin",
+    help="Manage plugins and skills.",
+    no_args_is_help=True,
+)
+app.add_typer(plugin_app, name="plugin")
+
+
+@plugin_app.command("install")
+def plugin_install(
+    source: str = typer.Argument(help="Plugin source path or URL"),
+    scope: str = typer.Option("user", "--scope", help="Installation scope: user or project"),
+    name: str | None = typer.Option(None, "--name", help="Override plugin name"),
+) -> None:
+    """Install a plugin from a source path."""
+    from pode_agent.services.plugins.marketplace import install_plugin
+
+    try:
+        installed = install_plugin(source, scope=scope, plugin_name=name)
+        typer.echo(f"Installed plugin: {installed.name} (v{installed.install_mode})")
+    except FileNotFoundError as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=1) from None
+
+
+@plugin_app.command("uninstall")
+def plugin_uninstall(
+    plugin_id: str = typer.Argument(help="Plugin ID to uninstall"),
+) -> None:
+    """Uninstall a plugin."""
+    from pode_agent.services.plugins.marketplace import uninstall_plugin
+
+    try:
+        uninstall_plugin(plugin_id)
+        typer.echo(f"Uninstalled plugin: {plugin_id}")
+    except KeyError as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=1) from None
+
+
+@plugin_app.command("enable")
+def plugin_enable(
+    plugin_id: str = typer.Argument(help="Plugin ID to enable"),
+) -> None:
+    """Enable a disabled plugin."""
+    from pode_agent.services.plugins.marketplace import enable_plugin
+
+    try:
+        enable_plugin(plugin_id)
+        typer.echo(f"Enabled plugin: {plugin_id}")
+    except KeyError as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=1) from None
+
+
+@plugin_app.command("disable")
+def plugin_disable(
+    plugin_id: str = typer.Argument(help="Plugin ID to disable"),
+) -> None:
+    """Disable a plugin without removing it."""
+    from pode_agent.services.plugins.marketplace import disable_plugin
+
+    try:
+        disable_plugin(plugin_id)
+        typer.echo(f"Disabled plugin: {plugin_id}")
+    except KeyError as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=1) from None
+
+
+@plugin_app.command("list")
+def plugin_list() -> None:
+    """List all installed plugins."""
+    from pode_agent.services.plugins.marketplace import list_installed_plugins
+
+    plugins = list_installed_plugins()
+    if not plugins:
+        typer.echo("No plugins installed.")
+        return
+
+    for p in plugins:
+        status = "enabled" if p.enabled else "disabled"
+        typer.echo(f"  {p.name} [{status}] from {p.source}")
+

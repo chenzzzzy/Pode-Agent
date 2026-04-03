@@ -12,6 +12,11 @@ Phase 3 additions:
 - Auto-compact framework (threshold-based truncation)
 - Plan mode result detection (enter_plan_mode / exit_plan_mode)
 
+Phase 5 additions:
+- Hook system integration (4 injection points)
+- Stop hook reentry with MAX_STOP_HOOK_ATTEMPTS guard
+- contextModifier propagation from tool results
+
 Reference: docs/agent-loop.md — Full specification
 """
 
@@ -47,6 +52,14 @@ from pode_agent.services.ai.base import (
     UnifiedRequestParams,
 )
 from pode_agent.services.ai.factory import query_llm
+from pode_agent.services.hooks.base import HookState
+from pode_agent.services.hooks.runner import (
+    MAX_STOP_HOOK_ATTEMPTS,
+    run_post_tool_use_hooks,
+    run_pre_tool_use_hooks,
+    run_stop_hooks,
+    run_user_prompt_submit_hooks,
+)
 from pode_agent.services.system.system_prompt import BASE_SYSTEM_PROMPT, build_system_prompt
 from pode_agent.types.session_events import (
     PermissionRequestData,
@@ -147,10 +160,12 @@ async def query_core(
     options: QueryOptions,
     *,
     _round: int = 0,
+    _hook_state: HookState | None = None,
+    _stop_hook_attempts: int = 0,
 ) -> AsyncGenerator[SessionEvent, None]:
     """Recursive Agentic Loop: LLM call → tool use → recurse.
 
-    Phase 2 simplifications: no hooks, no auto-compact, serial tool queue.
+    Phase 5: hooks, contextModifier, stop hook reentry.
 
     Args:
         messages: Full conversation history.
@@ -159,6 +174,8 @@ async def query_core(
         session: SessionManager instance.
         options: Runtime options.
         _round: Current recursion depth (safety counter).
+        _hook_state: Hook state carried across injection points.
+        _stop_hook_attempts: Stop hook reentry counter.
 
     Yields:
         SessionEvent instances.
@@ -174,6 +191,14 @@ async def query_core(
     # Step 1a: auto-compact if needed
     messages = auto_compact_if_needed(messages)
 
+    # Step 1b: Hook state (Phase 5)
+    hook_state = _hook_state or HookState()
+
+    # Step 1c: UserPromptSubmit hooks (only on first entry)
+    await run_user_prompt_submit_hooks(
+        "", messages, hook_state,
+    )
+
     # 1. Build system prompt with dynamic assembly (Phase 3)
     full_system_prompt = build_system_prompt(
         system_prompt or BASE_SYSTEM_PROMPT,
@@ -181,6 +206,9 @@ async def query_core(
         permission_mode=options.permission_mode,
         tools=tools,
     )
+    # Phase 5: append hook-injected system prompts
+    if hook_state.additional_system_prompts:
+        full_system_prompt += "\n\n" + "\n\n".join(hook_state.additional_system_prompts)
 
     # 2. Build tool definitions
     tool_defs = await _build_tool_definitions(tools)
@@ -288,11 +316,30 @@ async def query_core(
             data={"cost_usd": cost_usd, "total_usd": get_total_cost()},
         )
 
-    # 6. No tool uses → save message, yield DONE
+    # 6. No tool uses → check stop hooks, then DONE (Phase 5: stop hook reentry)
     if not tool_use_blocks:
+        stop_reason = "end_turn"
+        if _stop_hook_attempts < MAX_STOP_HOOK_ATTEMPTS:
+            stop_result = await run_stop_hooks(
+                session.get_messages(), stop_reason, hook_state,
+            )
+            if stop_result.action == "block" or stop_result.additional_system_prompt:
+                # Stop hook wants the loop to continue
+                async for event in query_core(
+                    messages=session.get_messages(),
+                    system_prompt=system_prompt,
+                    tools=tools,
+                    session=session,
+                    options=options,
+                    _round=_round + 1,
+                    _hook_state=hook_state,
+                    _stop_hook_attempts=_stop_hook_attempts + 1,
+                ):
+                    yield event
+                return
         yield SessionEvent(
             type=SessionEventType.DONE,
-            data={"stop_reason": "end_turn"},
+            data={"stop_reason": stop_reason},
             message_id=str(assistant_msg["uuid"]),
         )
         return
@@ -303,7 +350,7 @@ async def query_core(
         tool_uses=tool_use_blocks,
         tools=tools,
         execute_single=lambda tu: _check_permissions_and_call_tool(
-            tu, tools, session, options,
+            tu, tools, session, options, hook_state=hook_state,
         ),
         abort_event=session.abort_event,
     )
@@ -319,7 +366,7 @@ async def query_core(
     result_msg = build_tool_result_message(tool_use_blocks, tool_results)
     session.save_message(result_msg)
 
-    # 9. Recurse with updated messages
+    # 9. Recurse with updated messages (Phase 5: propagate hook_state)
     async for event in query_core(
         messages=session.get_messages(),
         system_prompt=system_prompt,
@@ -327,6 +374,7 @@ async def query_core(
         session=session,
         options=options,
         _round=_round + 1,
+        _hook_state=hook_state,
     ):
         yield event
 
@@ -366,10 +414,11 @@ async def _check_permissions_and_call_tool(
     tools: list[Tool],
     session: Any,  # SessionManager
     options: QueryOptions,
+    hook_state: HookState | None = None,
 ) -> AsyncGenerator[SessionEvent, None]:
-    """Execute a single tool use with permission checking.
+    """Execute a single tool use with permission checking and hook integration.
 
-    Pipeline: find tool → validate input → permission check → execute → format result.
+    Pipeline: find tool → pre hooks → validate → permission → execute → post hooks.
 
     Yields TOOL_USE_START, TOOL_PROGRESS, TOOL_RESULT, PERMISSION_REQUEST events.
     """
@@ -392,7 +441,32 @@ async def _check_permissions_and_call_tool(
         )
         return
 
-    # 2. Permission check
+    # 2. PreToolUse hooks (Phase 5)
+    if hook_state is not None:
+        pre_result = await run_pre_tool_use_hooks(
+            tool_use.name, tool_use.input, tool_use.id, hook_state,
+        )
+        if pre_result.action == "block":
+            yield SessionEvent(
+                type=SessionEventType.TOOL_RESULT,
+                data={
+                    "tool_use_id": tool_use.id,
+                    "tool_name": tool_use.name,
+                    "result": pre_result.message or "Blocked by hook",
+                    "is_error": True,
+                },
+            )
+            return
+        if pre_result.action == "modify" and pre_result.modified_data and isinstance(
+            pre_result.modified_data, dict
+        ):
+            tool_use = ToolUseBlock(
+                id=tool_use.id,
+                name=pre_result.modified_data.get("tool_name", tool_use.name),
+                input=pre_result.modified_data.get("tool_input", tool_use.input),
+            )
+
+    # 3. Permission check
     permission_result = _check_permissions(
         tool, tool_use.input, options, session,
     )
@@ -464,6 +538,13 @@ async def _check_permissions_and_call_tool(
             },
         )
 
+        # 4. PostToolUse hooks (Phase 5)
+        if hook_state is not None:
+            await run_post_tool_use_hooks(
+                tool_use.name, tool_use.input, result_text,
+                tool_use.id, is_error=False, hook_state=hook_state,
+            )
+
     except Exception as e:
         logger.exception("Tool execution failed: %s", tool_use.name)
         yield SessionEvent(
@@ -475,6 +556,13 @@ async def _check_permissions_and_call_tool(
                 "is_error": True,
             },
         )
+
+        # 4b. PostToolUse hooks for error case (Phase 5)
+        if hook_state is not None:
+            await run_post_tool_use_hooks(
+                tool_use.name, tool_use.input, f"Tool error: {e}",
+                tool_use.id, is_error=True, hook_state=hook_state,
+            )
 
 
 # ---------------------------------------------------------------------------

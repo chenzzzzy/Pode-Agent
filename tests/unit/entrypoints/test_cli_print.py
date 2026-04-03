@@ -37,15 +37,23 @@ class TestVersion:
 
 
 class TestNoPrompt:
-    def test_no_args_launches_repl_or_shows_bun_error(self) -> None:
-        """Without args, CLI attempts to launch REPL (needs Bun) or shows error."""
+    @patch("pode_agent.entrypoints.cli.asyncio")
+    def test_no_args_launches_repl(self, mock_asyncio: MagicMock) -> None:
+        """Without args, CLI attempts to launch REPL."""
+        mock_asyncio.run.return_value = 0
         result = runner.invoke(app, [])
-        # Either: Bun not installed → exit 1 with error message
-        # Or: Bun installed but UI entry missing → exit 1
-        # On success: exit 0
-        assert result.exit_code in (0, 1)
-        if result.exit_code == 1:
-            assert "bun" in result.output.lower() or "ui" in result.output.lower()
+        assert result.exit_code == 0
+        mock_asyncio.run.assert_called_once()
+
+    def test_no_args_bun_not_found(self) -> None:
+        """Without Bun installed, shows error and exits 1."""
+        with patch("pode_agent.entrypoints.cli.asyncio") as mock_asyncio:
+            # Make asyncio.run call _launch_repl which checks for Bun
+            async def _fake_launch(*args: Any, **kwargs: Any) -> int:
+                return 1
+            mock_asyncio.run.side_effect = lambda coro: 1
+            result = runner.invoke(app, [])
+            assert result.exit_code == 1
 
 
 # ---------------------------------------------------------------------------

@@ -37,6 +37,7 @@ async def collect_tool_result(
                 data=output.data,
                 result_for_assistant=output.result_for_assistant,
                 new_messages=output.new_messages or [],
+                context_modifier=output.context_modifier,
             )
 
     raise RuntimeError(f"Tool {tool.name} did not yield a result")

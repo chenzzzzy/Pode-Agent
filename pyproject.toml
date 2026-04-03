@@ -50,6 +50,7 @@ dev = [
     "pytest-asyncio>=0.23.0",
     "pytest-mock>=3.12.0",
     "pytest-cov>=5.0.0",
+    "pytest-timeout>=2.3.0",
     "mypy>=1.10.0",
     "ruff>=0.4.0",
     "types-pyyaml",
@@ -65,7 +66,8 @@ packages = ["pode_agent"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
-addopts = "-v --tb=short"
+addopts = "-v --tb=short --timeout=60"
+timeout = 60
 markers = [
     "e2e: End-to-end tests that run the full CLI",
     "requires_api_key: Tests that need real API keys",

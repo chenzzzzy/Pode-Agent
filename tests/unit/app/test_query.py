@@ -315,6 +315,7 @@ class TestQueryCore:
         mock_tool_output.data = {"files": ["a.py", "b.py", "c.py"]}
         mock_tool_output.result_for_assistant = "Found 3 files"
         mock_tool_output.new_messages = []
+        mock_tool_output.context_modifier = None
 
         async def mock_call(input: Any, context: Any) -> Any:
             yield mock_tool_output
@@ -457,6 +458,7 @@ class TestPermissionInteraction:
         mock_tool_output.data = {"stdout": "file.txt"}
         mock_tool_output.result_for_assistant = "file.txt"
         mock_tool_output.new_messages = []
+        mock_tool_output.context_modifier = None
 
         async def mock_call(inp: Any, ctx: Any) -> Any:
             yield mock_tool_output
@@ -606,6 +608,7 @@ class TestToolProgress:
         mock_result.data = {"files": ["a.py"]}
         mock_result.result_for_assistant = "1 file"
         mock_result.new_messages = []
+        mock_result.context_modifier = None
 
         async def mock_call(inp: Any, ctx: Any) -> Any:
             yield mock_progress

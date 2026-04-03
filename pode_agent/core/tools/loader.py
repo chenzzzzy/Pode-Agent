@@ -36,10 +36,10 @@ class ToolLoader:
         self._config = config
 
     async def load_all(self) -> None:
-        """Load all tool sources in order: builtin → (plugin) → (MCP)."""
+        """Load all tool sources in order: builtin → MCP → plugin."""
         self._load_builtin_tools()
-        # Phase 5: self._load_plugin_tools()
-        # Phase 5: self._load_mcp_tools()
+        await self._load_mcp_tools()
+        self._load_plugin_tools()
 
     def _load_builtin_tools(self) -> None:
         """Import and register all built-in tools from ``tools.get_all_tools()``."""
@@ -49,6 +49,60 @@ class ToolLoader:
         for tool in tools:
             self._registry.register(tool)
         logger.debug("Loaded %d built-in tools", len(tools))
+
+    async def _load_mcp_tools(self) -> None:
+        """Connect to configured MCP servers and register their tools."""
+        if not self._config:
+            return
+
+        mcp_servers = getattr(self._config, "mcp_servers", {})
+        if not mcp_servers:
+            return
+
+        from pode_agent.services.mcp.client import connect_all_mcp_servers
+        from pode_agent.services.mcp.tools import wrap_mcp_tool_as_pode_tool
+
+        wrapped_clients = await connect_all_mcp_servers(mcp_servers)
+        for wrapped in wrapped_clients:
+            if not wrapped.is_connected or not wrapped.client:
+                logger.warning(
+                    "MCP server '%s' not connected: %s", wrapped.name, wrapped.error,
+                )
+                continue
+            try:
+                tools = await wrapped.client.list_tools()
+                for tool_def in tools:
+                    pode_tool = wrap_mcp_tool_as_pode_tool(
+                        wrapped.client, wrapped.name, tool_def,
+                    )
+                    self._registry.register(pode_tool)
+                logger.info(
+                    "Loaded %d MCP tools from server '%s'", len(tools), wrapped.name,
+                )
+            except Exception:
+                logger.exception("Failed to load MCP tools from '%s'", wrapped.name)
+
+    def _load_plugin_tools(self) -> None:
+        """Load tools from package entry_points."""
+        try:
+            import importlib.metadata
+
+            eps = importlib.metadata.entry_points()
+            # Python 3.12+: entry_points() returns a SelectableGroups
+            tool_eps = (
+                eps.select(group="pode_agent.tools")
+                if hasattr(eps, "select")
+                else eps.get("pode_agent.tools", [])  # type: ignore[arg-type]
+            )
+            for ep in tool_eps:
+                try:
+                    tool_cls = ep.load()
+                    self._registry.register(tool_cls())
+                    logger.debug("Loaded plugin tool: %s", ep.name)
+                except Exception:
+                    logger.exception("Failed to load plugin tool: %s", ep.name)
+        except Exception:
+            logger.debug("No plugin entry_points group found")
 
 
 async def get_enabled_tools(

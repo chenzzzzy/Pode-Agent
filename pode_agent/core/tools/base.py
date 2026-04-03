@@ -16,6 +16,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from pode_agent.types.skill import ContextModifier
+
 
 class ToolOutput(BaseModel):
     """A single output item yielded by a tool during execution.
@@ -35,6 +37,7 @@ class ToolOutput(BaseModel):
     data: Any = None
     result_for_assistant: str | list[Any] | None = None
     new_messages: list[Any] | None = None
+    context_modifier: ContextModifier | None = None
 
 
 class ToolOptions(BaseModel):
@@ -84,6 +87,7 @@ class ToolResult(BaseModel):
     result_for_assistant: str | list[Any] | None = None
     new_messages: list[Any] = []
     error: str | None = None
+    context_modifier: ContextModifier | None = None
 
 
 class Tool(ABC):

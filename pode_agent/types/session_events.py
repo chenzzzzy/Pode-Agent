@@ -34,6 +34,11 @@ class SessionEventType(StrEnum):
     PLAN_STEP_DONE = "plan_step_done"
     PLAN_DONE = "plan_done"
     PLAN_CANCELLED = "plan_cancelled"
+    # Sub-agent events
+    SUB_AGENT_STARTED = "sub_agent_started"
+    SUB_AGENT_PROGRESS = "sub_agent_progress"
+    SUB_AGENT_COMPLETED = "sub_agent_completed"
+    SUB_AGENT_FAILED = "sub_agent_failed"
 
 
 class SessionEvent(BaseModel):
@@ -105,3 +110,45 @@ class PlanCancelledData(BaseModel):
 
     plan_id: str
     reason: str | None = None
+
+
+# --- Sub-agent event data models ---
+
+
+class SubAgentStartedData(BaseModel):
+    """Data payload for a ``SUB_AGENT_STARTED`` event."""
+
+    agent_id: str
+    subagent_type: str
+    description: str
+    model: str | None = None
+
+
+class SubAgentProgressData(BaseModel):
+    """Data payload for a ``SUB_AGENT_PROGRESS`` event."""
+
+    agent_id: str
+    tool_use_count: int = 0
+    duration_ms: int = 0
+    recent_action: str | None = None
+
+
+class SubAgentCompletedData(BaseModel):
+    """Data payload for a ``SUB_AGENT_COMPLETED`` event."""
+
+    agent_id: str
+    subagent_type: str
+    description: str
+    result_text: str | None = None
+    tool_use_count: int = 0
+    duration_ms: int = 0
+    tokens_used: int = 0
+
+
+class SubAgentFailedData(BaseModel):
+    """Data payload for a ``SUB_AGENT_FAILED`` event."""
+
+    agent_id: str
+    subagent_type: str
+    description: str
+    error: str

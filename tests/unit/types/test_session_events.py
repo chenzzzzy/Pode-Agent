@@ -29,6 +29,9 @@ class TestSessionEventType:
             # Plan mode events (Phase 3)
             "plan_created", "plan_approved", "plan_step_start",
             "plan_step_done", "plan_done", "plan_cancelled",
+            # Sub-agent events (Phase 5)
+            "sub_agent_started", "sub_agent_progress",
+            "sub_agent_completed", "sub_agent_failed",
         }
         actual = {e.value for e in SessionEventType}
         assert actual == expected
