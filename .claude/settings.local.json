@@ -30,7 +30,9 @@
       "Bash(uv run python -c \":*)",
       "Bash(tasklist /FI \"IMAGENAME eq python.exe\")",
       "Bash(bun run:*)",
-      "Bash(bun test:*)"
+      "Bash(bun test:*)",
+      "mcp__zai-mcp-server__diagnose_error_screenshot",
+      "mcp__zai-mcp-server__extract_text_from_screenshot"
     ]
   }
 }

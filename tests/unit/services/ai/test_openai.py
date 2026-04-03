@@ -150,6 +150,100 @@ class TestToOpenAIMessages:
         result = _to_openai_messages([{"role": "user", "content": content}])
         assert result == [{"role": "user", "content": [content]}]
 
+    def test_assistant_tool_use_converts_to_tool_calls(self) -> None:
+        """Anthropic-style tool_use blocks → OpenAI tool_calls."""
+        messages = [{
+            "role": "assistant",
+            "content": [
+                {"type": "text", "text": "Let me run that."},
+                {"type": "tool_use", "id": "tu_001", "name": "bash", "input": {"command": "ls"}},
+            ],
+        }]
+        result = _to_openai_messages(messages)
+        assert len(result) == 1
+        msg = result[0]
+        assert msg["role"] == "assistant"
+        assert msg["content"] == "Let me run that."
+        assert len(msg["tool_calls"]) == 1
+        tc = msg["tool_calls"][0]
+        assert tc["id"] == "tu_001"
+        assert tc["type"] == "function"
+        assert tc["function"]["name"] == "bash"
+        assert tc["function"]["arguments"] == '{"command": "ls"}'
+
+    def test_assistant_tool_use_only_no_text(self) -> None:
+        """Assistant with only tool_use blocks, no text."""
+        messages = [{
+            "role": "assistant",
+            "content": [
+                {"type": "tool_use", "id": "tu_002", "name": "file_read", "input": {"path": "a.py"}},
+            ],
+        }]
+        result = _to_openai_messages(messages)
+        assert len(result) == 1
+        assert result[0]["content"] is None
+        assert len(result[0]["tool_calls"]) == 1
+
+    def test_user_tool_result_converts_to_tool_role(self) -> None:
+        """Anthropic-style tool_result blocks → OpenAI role='tool' messages."""
+        messages = [{
+            "role": "user",
+            "content": [
+                {"type": "tool_result", "tool_use_id": "tu_001", "content": "file1.py\nfile2.py"},
+            ],
+        }]
+        result = _to_openai_messages(messages)
+        assert len(result) == 1
+        assert result[0]["role"] == "tool"
+        assert result[0]["tool_call_id"] == "tu_001"
+        assert result[0]["content"] == "file1.py\nfile2.py"
+
+    def test_user_tool_result_multiple_blocks(self) -> None:
+        """Multiple tool_result blocks → separate tool messages."""
+        messages = [{
+            "role": "user",
+            "content": [
+                {"type": "tool_result", "tool_use_id": "tu_001", "content": "result_a"},
+                {"type": "tool_result", "tool_use_id": "tu_002", "content": "result_b"},
+            ],
+        }]
+        result = _to_openai_messages(messages)
+        assert len(result) == 2
+        assert result[0]["role"] == "tool"
+        assert result[0]["tool_call_id"] == "tu_001"
+        assert result[1]["role"] == "tool"
+        assert result[1]["tool_call_id"] == "tu_002"
+
+    def test_full_tool_roundtrip(self) -> None:
+        """Complete conversation with tool use → tool result roundtrip."""
+        messages = [
+            {"role": "user", "content": "List files"},
+            {
+                "role": "assistant",
+                "content": [
+                    {"type": "text", "text": "I'll list the files."},
+                    {"type": "tool_use", "id": "tu_001", "name": "bash", "input": {"command": "ls"}},
+                ],
+            },
+            {
+                "role": "user",
+                "content": [
+                    {"type": "tool_result", "tool_use_id": "tu_001", "content": "file1.py"},
+                ],
+            },
+        ]
+        result = _to_openai_messages(messages)
+
+        assert result[0] == {"role": "user", "content": "List files"}
+
+        assert result[1]["role"] == "assistant"
+        assert result[1]["content"] == "I'll list the files."
+        assert len(result[1]["tool_calls"]) == 1
+
+        assert result[2]["role"] == "tool"
+        assert result[2]["tool_call_id"] == "tu_001"
+        assert result[2]["content"] == "file1.py"
+
 
 # ---------------------------------------------------------------------------
 # OpenAIProvider init

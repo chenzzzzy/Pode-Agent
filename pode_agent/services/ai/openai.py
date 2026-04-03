@@ -10,6 +10,7 @@ Reference: docs/api-specs.md — AI Provider API
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 from collections.abc import AsyncGenerator
 from typing import Any
@@ -57,22 +58,78 @@ def _to_openai_messages(
     """Convert internal message format to OpenAI ChatCompletion format.
 
     Internal messages are dicts with ``role`` and ``content`` keys.
-    Tool result messages use role ``tool`` with ``tool_call_id``.
+    Handles conversion from Anthropic-style content blocks:
+
+    - Assistant messages with ``tool_use`` blocks → ``tool_calls`` array
+    - User messages with ``tool_result`` blocks → ``role="tool"`` messages
+
+    Plain text / list content without tool blocks is passed through unchanged.
     """
     result: list[dict[str, Any]] = []
     for msg in messages:
         role = msg.get("role", "user")
         content = msg.get("content")
 
-        if isinstance(content, str):
-            result.append({"role": role, "content": content})
-        elif isinstance(content, list):
-            # OpenAI expects content as a string or list of content parts
+        # --- Assistant with tool_use content blocks → tool_calls ---
+        if role == "assistant" and isinstance(content, list):
+            has_tool_uses = any(
+                isinstance(b, dict) and b.get("type") == "tool_use"
+                for b in content
+            )
+            if has_tool_uses:
+                text_parts: list[str] = []
+                tool_calls: list[dict[str, Any]] = []
+                for block in content:
+                    if not isinstance(block, dict):
+                        continue
+                    if block.get("type") == "text":
+                        text_parts.append(block.get("text", ""))
+                    elif block.get("type") == "tool_use":
+                        tool_input = block.get("input", {})
+                        if isinstance(tool_input, dict):
+                            tool_input = json.dumps(tool_input)
+                        elif not isinstance(tool_input, str):
+                            tool_input = str(tool_input)
+                        tool_calls.append({
+                            "id": block.get("id", ""),
+                            "type": "function",
+                            "function": {
+                                "name": block.get("name", ""),
+                                "arguments": tool_input,
+                            },
+                        })
+                openai_msg: dict[str, Any] = {"role": "assistant"}
+                openai_msg["content"] = "\n".join(text_parts) if text_parts else None
+                if tool_calls:
+                    openai_msg["tool_calls"] = tool_calls
+                result.append(openai_msg)
+                continue
+
+        # --- User with tool_result content blocks → role="tool" messages ---
+        if role == "user" and isinstance(content, list):
+            has_tool_results = any(
+                isinstance(b, dict) and b.get("type") == "tool_result"
+                for b in content
+            )
+            if has_tool_results:
+                for block in content:
+                    if isinstance(block, dict) and block.get("type") == "tool_result":
+                        result.append({
+                            "role": "tool",
+                            "tool_call_id": block.get("tool_use_id", ""),
+                            "content": block.get("content", ""),
+                        })
+                    elif isinstance(block, dict) and block.get("type") == "text":
+                        result.append({"role": "user", "content": block.get("text", "")})
+                continue
+
+        # --- Default: plain string/list/dict content ---
+        if isinstance(content, str | list):
             result.append({"role": role, "content": content})
         elif isinstance(content, dict):
             result.append({"role": role, "content": [content]})
         else:
-            result.append({"role": role, "content": str(content)})
+            result.append({"role": role, "content": str(content) if content else ""})
 
     return result
 
