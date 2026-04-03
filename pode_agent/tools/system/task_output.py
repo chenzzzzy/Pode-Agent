@@ -1,9 +1,9 @@
-"""TaskOutputTool: read the output of a background task.
+"""TaskOutputTool: read the output of a background SubAgent task.
 
-Phase 3 skeleton: returns a placeholder message indicating that
-background task tracking is not yet implemented.
+Supports both non-blocking reads and blocking waits with configurable
+timeout. Reads from the background task registry.
 
-Reference: docs/api-specs.md -- Tool System API, TaskOutputTool
+Reference: docs/subagent-system.md — TaskOutputTool
 """
 
 from __future__ import annotations
@@ -15,6 +15,11 @@ from pydantic import BaseModel, Field
 
 from pode_agent.core.tools.base import Tool, ToolOutput, ToolUseContext
 from pode_agent.infra.logging import get_logger
+from pode_agent.services.agents.background_tasks import (
+    get_background_agent_task,
+    wait_for_background_agent_task,
+)
+from pode_agent.types.agent import BackgroundAgentStatus
 
 logger = get_logger(__name__)
 
@@ -22,16 +27,24 @@ logger = get_logger(__name__)
 class TaskOutputInput(BaseModel):
     """Input schema for TaskOutputTool."""
 
-    task_id: str = Field(description="ID of the background task to read output from")
+    task_id: str = Field(description="ID of the background agent task")
+    block: bool = Field(
+        default=False,
+        description="If true, wait for the task to complete before returning",
+    )
+    wait_ms: int = Field(
+        default=30000,
+        description="Maximum time to wait in milliseconds when block=true",
+    )
 
 
 class TaskOutputTool(Tool):
-    """Read the output of a background task."""
+    """Read the output of a background SubAgent task."""
 
-    name: str = "task_output"
+    name: str = "TaskOutput"
     description: str = (
-        "Read the output of a background task by its task ID. "
-        "Returns the current stdout/stderr and completion status."
+        "Read the output of a background agent task by its task ID. "
+        "Optionally block until the task completes."
     )
 
     def input_schema(self) -> type[BaseModel]:
@@ -56,7 +69,8 @@ class TaskOutputTool(Tool):
     ) -> AsyncGenerator[ToolOutput, None]:
         assert isinstance(input, TaskOutputInput)
 
-        if not input.task_id.strip():
+        task_id = input.task_id.strip()
+        if not task_id:
             yield ToolOutput(
                 type="result",
                 data={"error": "Task ID cannot be empty"},
@@ -64,23 +78,69 @@ class TaskOutputTool(Tool):
             )
             return
 
-        # Phase 3 skeleton: no background tasks tracked yet
+        # Blocking wait if requested
+        if input.block:
+            try:
+                await wait_for_background_agent_task(task_id, timeout_ms=input.wait_ms)
+            except KeyError:
+                yield ToolOutput(
+                    type="result",
+                    data={"error": f"Background task not found: {task_id}"},
+                    result_for_assistant=f"Error: Background task not found: {task_id}",
+                )
+                return
+
+        # Read current state
+        task = get_background_agent_task(task_id)
+        if task is None:
+            yield ToolOutput(
+                type="result",
+                data={"error": f"Background task not found: {task_id}"},
+                result_for_assistant=f"Error: Background task not found: {task_id}",
+            )
+            return
+
+        # Build result based on status
+        data: dict[str, Any] = {
+            "agent_id": task.agent_id,
+            "description": task.description,
+            "status": str(task.status),
+        }
+
+        if task.status == BackgroundAgentStatus.COMPLETED:
+            data["result_text"] = task.result_text
+            data["total_tool_use_count"] = task.total_tool_use_count
+            data["total_duration_ms"] = task.total_duration_ms
+            result_for_assistant = (
+                f"[Agent {task.agent_id} completed] {task.result_text} "
+                f"({task.total_tool_use_count} tool uses, "
+                f"{task.total_duration_ms / 1000:.1f}s)"
+            )
+        elif task.status == BackgroundAgentStatus.FAILED:
+            data["error"] = task.error
+            result_for_assistant = (
+                f"[Agent {task.agent_id} failed] {task.error}"
+            )
+        elif task.status == BackgroundAgentStatus.KILLED:
+            data["error"] = "Task was killed"
+            result_for_assistant = (
+                f"[Agent {task.agent_id} killed]"
+            )
+        else:
+            # Still running
+            data["message"] = "Task is still running"
+            result_for_assistant = (
+                f"[Agent {task.agent_id} still running] "
+                f"Use TaskOutput with block=true to wait for completion."
+            )
+
         yield ToolOutput(
             type="result",
-            data={
-                "status": "skeleton",
-                "task_id": input.task_id,
-                "message": "No background tasks tracked yet. Background task management will be implemented in a future phase.",
-            },
-            result_for_assistant=(
-                f"No background tasks tracked yet for task_id '{input.task_id}'. "
-                "Background task management will be implemented in a future phase."
-            ),
+            data=data,
+            result_for_assistant=result_for_assistant,
         )
 
     def render_result_for_assistant(self, output: Any) -> str | list[Any]:
         if isinstance(output, dict) and "error" in output:
             return str(output["error"])
-        if isinstance(output, dict) and "message" in output:
-            return str(output["message"])
         return str(output)

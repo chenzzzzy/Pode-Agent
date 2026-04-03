@@ -164,33 +164,80 @@ class TestBackgroundTasks:
 
 
 class TestForkContext:
-    def test_empty_messages(self) -> None:
-        result = build_fork_context([], "tu_001")
-        assert result == []
+    def test_disabled_returns_only_prompt(self) -> None:
+        ctx, prompt = build_fork_context(
+            enabled=False, prompt="Do something",
+        )
+        assert ctx == []
+        assert len(prompt) == 1
+        assert prompt[0]["role"] == "user"
+        assert prompt[0]["content"] == "Do something"
 
-    def test_finds_tool_use(self) -> None:
-        messages = [
-            {"type": "user", "message": "hello"},
-            {
-                "type": "assistant",
-                "message": [
-                    {"type": "text", "text": "Let me search"},
-                    {"type": "tool_use", "id": "tu_001", "name": "grep", "input": {}},
-                ],
-            },
-            {"type": "user", "content": [{"type": "tool_result", "tool_use_id": "tu_001"}]},
-        ]
-        result = build_fork_context(messages, "tu_001")
-        # Should include messages up to the assistant message with tu_001
-        assert len(result) == 2
-        assert result[0]["type"] == "user"
-        assert result[1]["type"] == "assistant"
+    def test_enabled_no_log_returns_only_prompt(self) -> None:
+        ctx, prompt = build_fork_context(
+            enabled=True, prompt="Do something", tool_use_id="tu_001",
+        )
+        assert ctx == []
+        assert len(prompt) == 1
 
-    def test_no_matching_tool_use(self) -> None:
+    def test_enabled_reads_jsonl_and_slices(self, tmp_path: Path) -> None:
+        # Write a fake JSONL log
+        import json
+
+        log_file = tmp_path / "session.jsonl"
         messages = [
-            {"type": "user", "message": "hello"},
-            {"type": "assistant", "message": [{"type": "text", "text": "Hi"}]},
+            {"role": "user", "content": "hello"},
+            {"role": "assistant", "content": [
+                {"type": "text", "text": "Let me search"},
+            ]},
+            {"role": "assistant", "content": [
+                {"type": "text", "text": "Now running task"},
+                {"type": "tool_use", "id": "tu_001", "name": "Task", "input": {}},
+            ]},
+            {"role": "user", "content": [
+                {"type": "tool_result", "tool_use_id": "tu_001"},
+            ]},
         ]
-        result = build_fork_context(messages, "tu_999")
-        # Returns all messages since no match found
-        assert len(result) == 2
+        with open(log_file, "w", encoding="utf-8") as f:
+            for msg in messages:
+                f.write(json.dumps(msg) + "\n")
+
+        ctx, prompt = build_fork_context(
+            enabled=True,
+            prompt="Sub task",
+            tool_use_id="tu_001",
+            message_log_name=str(log_file),
+        )
+
+        # ctx should have messages BEFORE the assistant turn with tu_001
+        assert len(ctx) == 2
+        assert ctx[0]["role"] == "user"
+        assert ctx[1]["role"] == "assistant"
+
+        # prompt should have: synthetic assistant + boundary user + actual prompt
+        assert len(prompt) == 3
+        assert prompt[0]["role"] == "assistant"  # synthetic tool_use
+        assert prompt[1]["role"] == "user"  # boundary marker
+        assert prompt[2]["role"] == "user"  # actual task
+        assert prompt[2]["content"] == "Sub task"
+
+    def test_no_matching_tool_use_returns_all(self, tmp_path: Path) -> None:
+        import json
+
+        log_file = tmp_path / "session.jsonl"
+        messages = [
+            {"role": "user", "content": "hello"},
+            {"role": "assistant", "content": [{"type": "text", "text": "Hi"}]},
+        ]
+        with open(log_file, "w", encoding="utf-8") as f:
+            for msg in messages:
+                f.write(json.dumps(msg) + "\n")
+
+        ctx, prompt = build_fork_context(
+            enabled=True,
+            prompt="Sub task",
+            tool_use_id="tu_999",
+            message_log_name=str(log_file),
+        )
+        # All messages returned since no match
+        assert len(ctx) == 2

@@ -1,13 +1,18 @@
-"""TaskTool: manage sub-tasks within the agent session.
+"""TaskTool: launch SubAgent instances for delegated task execution.
 
-Provides basic in-memory task management with create, list, and cancel
-actions.  Tasks are stored per-tool-instance in an internal dict.
+Supports both foreground (synchronous) and background (asynchronous)
+sub-agent execution with full context isolation, tool filtering, and
+transcript persistence.
 
-Reference: docs/api-specs.md -- Tool System API, TaskTool
+Reference: docs/subagent-system.md — TaskTool
 """
 
 from __future__ import annotations
 
+import asyncio
+import os
+import time
+import uuid
 from collections.abc import AsyncGenerator
 from typing import Any, Literal
 
@@ -15,52 +20,191 @@ from pydantic import BaseModel, Field
 
 from pode_agent.core.tools.base import Tool, ToolOutput, ToolUseContext
 from pode_agent.infra.logging import get_logger
+from pode_agent.services.agents.background_tasks import (
+    update_background_agent_task,
+    upsert_background_agent_task,
+)
+from pode_agent.services.agents.fork_context import build_fork_context
+from pode_agent.services.agents.loader import get_agent_by_type, load_agents
+from pode_agent.services.agents.transcripts import (
+    get_agent_transcript,
+    save_agent_transcript,
+)
+from pode_agent.types.agent import AgentModel
 
 logger = get_logger(__name__)
 
+# ---------------------------------------------------------------------------
+# Constants
+# ---------------------------------------------------------------------------
+
+SUBAGENT_DISALLOWED_TOOL_NAMES: frozenset[str] = frozenset([
+    "Task",               # Prevent nested sub-agents
+    "TaskOutput",         # Sub-agents don't read background tasks
+    "KillShell",          # Sub-agents must not terminate the process
+    "EnterPlanMode",      # Sub-agents don't enter plan mode
+    "ExitPlanMode",       # Sub-agents don't exit plan mode
+    "AskUserQuestion",    # Sub-agents don't directly ask the user
+])
+
+
+# ---------------------------------------------------------------------------
+# Input schema
+# ---------------------------------------------------------------------------
+
 
 class TaskInput(BaseModel):
-    """Input schema for TaskTool."""
+    """SubAgent input schema."""
 
-    action: Literal["create", "list", "cancel"] = Field(
-        description="Action to perform: create a new task, list all tasks, or cancel a task",
+    description: str = Field(
+        description="A short (3-5 word) description of the task",
     )
-    description: str | None = Field(
+    prompt: str = Field(
+        description="The task for the agent to perform",
+    )
+    subagent_type: str = Field(
+        default="general-purpose",
+        description="The type of specialized agent to use for this task",
+    )
+    model: Literal["sonnet", "opus", "haiku"] | None = Field(
         default=None,
-        description="Description of the task (required for create action)",
+        description="Optional model to use for this agent",
     )
-    task_id: str | None = Field(
+    resume: str | None = Field(
         default=None,
-        description="ID of the task to cancel (required for cancel action)",
+        description="Optional agent ID to resume from",
+    )
+    run_in_background: bool = Field(
+        default=False,
+        description="Set to true to run this agent in the background",
     )
 
 
-class _TaskEntry(BaseModel):
-    """Internal representation of a task."""
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
 
-    task_id: str
-    description: str
-    status: str = "pending"
+_MODEL_MAP: dict[str, str] = {
+    "haiku": "claude-haiku-4-5-20251001",
+    "sonnet": "claude-sonnet-4-5-20251101",
+    "opus": "claude-opus-4-5-20250129",
+}
+
+
+def _model_enum_to_pointer(model_name: str) -> str:
+    """Map a short model name to a full model identifier."""
+    return _MODEL_MAP.get(model_name, model_name)
+
+
+def resolve_subagent_model(
+    *,
+    input_model: str | None,
+    agent_config: Any,  # AgentConfig
+    parent_model: str,
+    default_subagent_model: str = "claude-sonnet-4-5-20251101",
+) -> str:
+    """Determine the model for a sub-agent.
+
+    Priority (highest to lowest):
+    1. PODE_SUBAGENT_MODEL environment variable
+    2. input_model parameter (TaskInput.model)
+    3. agent_config.model (when not 'inherit')
+    4. parent_model
+    5. default_subagent_model
+    """
+    # 1. Environment variable
+    env_model = os.environ.get("PODE_SUBAGENT_MODEL", "").strip()
+    if env_model:
+        return env_model
+
+    # 2. Input parameter
+    if input_model:
+        return _model_enum_to_pointer(input_model)
+
+    # 3. Agent config
+    config_model = agent_config.model
+    if config_model != AgentModel.INHERIT:
+        return _model_enum_to_pointer(config_model.value)
+
+    # 4. Parent model
+    if parent_model:
+        return parent_model
+
+    # 5. Default
+    return default_subagent_model
+
+
+async def get_task_tools(
+    safe_mode: bool = False,
+    agent_config: Any | None = None,  # AgentConfig | None
+) -> list[Tool]:
+    """Get the filtered tool set for a sub-agent.
+
+    Three-layer filtering:
+    1. Remove always-disallowed tools
+    2. Whitelist filter (agent_config.tools)
+    3. Blacklist filter (agent_config.disallowed_tools)
+    """
+    from pode_agent.tools import get_all_tools
+
+    all_tools = get_all_tools()
+    if safe_mode:
+        all_tools = [t for t in all_tools if t.is_read_only()]
+
+    # Layer 1: Remove always-disallowed
+    tools = [t for t in all_tools if t.name not in SUBAGENT_DISALLOWED_TOOL_NAMES]
+
+    if agent_config is None:
+        return tools
+
+    # Layer 2: Whitelist
+    tool_filter = agent_config.tools
+    if tool_filter != "*":
+        allowed = frozenset(tool_filter)
+        tools = [t for t in tools if t.name in allowed]
+
+    # Layer 3: Blacklist
+    if agent_config.disallowed_tools:
+        disallowed = frozenset(agent_config.disallowed_tools)
+        tools = [t for t in tools if t.name not in disallowed]
+
+    return tools
+
+
+def _extract_assistant_text(messages: list[dict[str, Any]]) -> str:
+    """Extract the text content from the last assistant message."""
+    for msg in reversed(messages):
+        role = msg.get("role", "")
+        if role == "assistant":
+            content = msg.get("content", "")
+            if isinstance(content, str):
+                return content
+            if isinstance(content, list):
+                parts: list[str] = []
+                for block in content:
+                    if isinstance(block, dict) and block.get("type") == "text":
+                        parts.append(block.get("text", ""))
+                return "\n".join(parts)
+    return ""
+
+
+# ---------------------------------------------------------------------------
+# TaskTool
+# ---------------------------------------------------------------------------
 
 
 class TaskTool(Tool):
-    """Manage sub-tasks within the agent session.
+    """Launch SubAgent instances for delegated task execution.
 
-    Phase 3 skeleton: in-memory dict for tasks, basic create/list/cancel.
+    Supports foreground (synchronous) and background (asynchronous) modes.
     """
 
-    name: str = "task"
+    name: str = "Task"
     description: str = (
-        "Manage sub-tasks within the agent session. "
-        "Create new tasks, list existing ones, or cancel pending tasks."
+        "Launch a new agent to handle complex, multi-step tasks autonomously. "
+        "The agent has its own conversation history and can use tools. "
+        "Use for research, code review, testing, or any multi-step work."
     )
-
-    # In-memory task store keyed by task_id
-    _tasks: dict[str, _TaskEntry]
-
-    def __init__(self, **kwargs: Any) -> None:
-        super().__init__(**kwargs)
-        self._tasks = {}
 
     def input_schema(self) -> type[BaseModel]:
         return TaskInput
@@ -83,100 +227,336 @@ class TaskTool(Tool):
         context: ToolUseContext,
     ) -> AsyncGenerator[ToolOutput, None]:
         assert isinstance(input, TaskInput)
+        async for output in self._execute(input, context):
+            yield output
 
-        if input.action == "create":
-            async for output in self._handle_create(input):
+    # ------------------------------------------------------------------
+    # Internal execution
+    # ------------------------------------------------------------------
+
+    async def _execute(
+        self,
+        input: TaskInput,
+        context: ToolUseContext,
+    ) -> AsyncGenerator[ToolOutput, None]:
+        """Common setup, then dispatch to foreground or background."""
+        # 1. Load agent config
+        agents = await load_agents()
+        agent_config = get_agent_by_type(agents, input.subagent_type)
+        if agent_config is None:
+            yield ToolOutput(
+                type="result",
+                data={"error": f"Unknown agent type: {input.subagent_type}"},
+                result_for_assistant=f"Error: Unknown agent type: {input.subagent_type}",
+            )
+            return
+
+        # 2. Resolve model
+        parent_model = context.options.model or ""
+        model = resolve_subagent_model(
+            input_model=input.model,
+            agent_config=agent_config,
+            parent_model=parent_model,
+        )
+
+        # 3. Filter tools
+        tools = await get_task_tools(
+            safe_mode=context.options.safe_mode,
+            agent_config=agent_config,
+        )
+
+        # 4. Generate or resume agent_id
+        agent_id = input.resume or f"agent_{uuid.uuid4().hex[:8]}"
+
+        # 5. Build initial messages
+        messages: list[dict[str, Any]] = []
+
+        # Resume from transcript if requested
+        if input.resume:
+            transcript = get_agent_transcript(input.resume)
+            if transcript:
+                messages = list(transcript)
+
+        # Fork context (if enabled and not resuming)
+        if agent_config.fork_context and not input.resume:
+            fork_ctx, prompt_msgs = build_fork_context(
+                enabled=True,
+                prompt=input.prompt,
+                tool_use_id=context.tool_use_id,
+                message_log_name=context.options.message_log_name,
+                fork_number=context.options.fork_number,
+            )
+            messages.extend(fork_ctx)
+            messages.extend(prompt_msgs)
+        elif not input.resume:
+            messages.append({"role": "user", "content": input.prompt})
+
+        # 6. Build system prompt
+        system_prompt = agent_config.system_prompt or ""
+
+        # 7. Dispatch
+        if input.run_in_background:
+            async for output in self._run_background(
+                agent_id=agent_id,
+                description=input.description,
+                prompt=input.prompt,
+                model=model,
+                system_prompt=system_prompt,
+                tools=tools,
+                messages=messages,
+                subagent_type=input.subagent_type,
+            ):
                 yield output
-        elif input.action == "list":
-            async for output in self._handle_list():
+        else:
+            async for output in self._run_foreground(
+                agent_id=agent_id,
+                description=input.description,
+                prompt=input.prompt,
+                model=model,
+                system_prompt=system_prompt,
+                tools=tools,
+                messages=messages,
+                context=context,
+            ):
                 yield output
-        elif input.action == "cancel":
-            async for output in self._handle_cancel(input):
-                yield output
 
-    async def _handle_create(self, input: TaskInput) -> AsyncGenerator[ToolOutput, None]:
-        """Create a new task."""
-        description = input.description or "Untitled task"
+    # ------------------------------------------------------------------
+    # Foreground execution
+    # ------------------------------------------------------------------
 
-        # Generate a simple task ID
-        import uuid
+    async def _run_foreground(
+        self,
+        *,
+        agent_id: str,
+        description: str,
+        prompt: str,
+        model: str,
+        system_prompt: str,
+        tools: list[Tool],
+        messages: list[dict[str, Any]],
+        context: ToolUseContext,
+    ) -> AsyncGenerator[ToolOutput, None]:
+        """Run sub-agent synchronously, yielding progress then result."""
+        from pode_agent.app.query import query_core
+        from pode_agent.app.session import SessionManager
+        from pode_agent.core.permissions.types import PermissionContext, PermissionMode
 
-        task_id = str(uuid.uuid4())[:8]
-        entry = _TaskEntry(task_id=task_id, description=description, status="pending")
-        self._tasks[task_id] = entry
+        start_time = time.monotonic()
+
+        # Yield initial progress
+        yield ToolOutput(
+            type="progress",
+            content=f"[Agent {agent_id} starting: {description}]",
+        )
+
+        # Create sub-session
+        session = SessionManager(
+            tools=tools,
+            initial_messages=messages,
+            permission_context=PermissionContext(mode=PermissionMode.ACCEPT_EDITS),
+            model=model,
+            system_prompt=system_prompt,
+        )
+
+        tool_use_count = 0
+        last_progress_time = 0.0
+
+        # Run agentic loop
+        from pode_agent.app.query import QueryOptions
+
+        options = QueryOptions(
+            model=model,
+            cwd=str(os.getcwd()),
+        )
+
+        try:
+            async for event in query_core(
+                messages=session.get_messages(),
+                system_prompt=system_prompt,
+                tools=tools,
+                session=session,
+                options=options,
+            ):
+                # Track tool usage
+                event_type = getattr(event, "type", None)
+
+                if event_type is not None and str(event_type) == "tool_use":
+                    tool_use_count += 1
+
+                # Throttled progress yielding (200ms)
+                now = time.monotonic()
+                if now - last_progress_time >= 0.2:
+                    yield ToolOutput(
+                        type="progress",
+                        content=f"[Agent {agent_id} working...] ({tool_use_count} tool uses)",
+                    )
+                    last_progress_time = now
+
+        except Exception as exc:
+            logger.exception("SubAgent %s failed", agent_id)
+            yield ToolOutput(
+                type="result",
+                data={
+                    "status": "completed",
+                    "agent_id": agent_id,
+                    "description": description,
+                    "prompt": prompt,
+                    "error": str(exc),
+                },
+                result_for_assistant=f"[Agent {agent_id} failed: {exc}]",
+            )
+            return
+
+        duration_ms = int((time.monotonic() - start_time) * 1000)
+
+        # Extract result text
+        sub_messages = session.get_messages()
+        result_text = _extract_assistant_text(sub_messages)
+
+        # Save transcript
+        save_agent_transcript(agent_id, sub_messages)
 
         yield ToolOutput(
             type="result",
             data={
-                "event": "task_created",
-                "task_id": task_id,
+                "status": "completed",
+                "agent_id": agent_id,
                 "description": description,
-                "status": "pending",
+                "prompt": prompt,
+                "content": [{"type": "text", "text": result_text}],
+                "total_tool_use_count": tool_use_count,
+                "total_duration_ms": duration_ms,
             },
             result_for_assistant=(
-                f"Task created: [{task_id}] {description}"
+                f"[Agent {agent_id} completed] {result_text} "
+                f"({tool_use_count} tool uses, {duration_ms / 1000:.1f}s)"
             ),
         )
 
-    async def _handle_list(self) -> AsyncGenerator[ToolOutput, None]:
-        """List all tasks."""
-        tasks_list = [
-            {
-                "task_id": entry.task_id,
-                "description": entry.description,
-                "status": entry.status,
-            }
-            for entry in self._tasks.values()
-        ]
+    # ------------------------------------------------------------------
+    # Background execution
+    # ------------------------------------------------------------------
 
-        if not tasks_list:
-            result_text = "(no tasks)"
-        else:
-            lines: list[str] = []
-            for t in tasks_list:
-                status_icon = "+" if t["status"] == "pending" else "-"
-                lines.append(f"  [{status_icon}] {t['task_id']}: {t['description']}")
-            result_text = "\n".join(lines)
+    async def _run_background(
+        self,
+        *,
+        agent_id: str,
+        description: str,
+        prompt: str,
+        model: str,
+        system_prompt: str,
+        tools: list[Tool],
+        messages: list[dict[str, Any]],
+        subagent_type: str,
+    ) -> AsyncGenerator[ToolOutput, None]:
+        """Launch sub-agent as a background task, return immediately."""
+        # Register background task
+        upsert_background_agent_task(
+            agent_id=agent_id,
+            description=description,
+            prompt=prompt,
+            subagent_type=subagent_type,
+        )
 
+        # Launch coroutine
+        asyncio.create_task(
+            self._background_worker(
+                agent_id=agent_id,
+                model=model,
+                system_prompt=system_prompt,
+                tools=tools,
+                messages=messages,
+            )
+        )
+
+        # Return immediately
         yield ToolOutput(
             type="result",
             data={
-                "tasks": tasks_list,
-                "total": len(tasks_list),
+                "status": "async_launched",
+                "agent_id": agent_id,
+                "description": description,
+                "prompt": prompt,
             },
-            result_for_assistant=result_text,
+            result_for_assistant=(
+                f"[Agent {agent_id} launched in background] "
+                f"Use TaskOutput to check results."
+            ),
         )
 
-    async def _handle_cancel(self, input: TaskInput) -> AsyncGenerator[ToolOutput, None]:
-        """Cancel an existing task."""
-        task_id = input.task_id
-        if not task_id:
-            yield ToolOutput(
-                type="result",
-                data={"error": "task_id is required for cancel action"},
-                result_for_assistant="Error: task_id is required for cancel action",
-            )
-            return
+    async def _background_worker(
+        self,
+        *,
+        agent_id: str,
+        model: str,
+        system_prompt: str,
+        tools: list[Tool],
+        messages: list[dict[str, Any]],
+    ) -> None:
+        """Run sub-agent in background, updating task registry."""
+        from pode_agent.app.query import QueryOptions, query_core
+        from pode_agent.app.session import SessionManager
+        from pode_agent.core.permissions.types import PermissionContext, PermissionMode
+        from pode_agent.types.agent import BackgroundAgentStatus
 
-        entry = self._tasks.get(task_id)
-        if not entry:
-            yield ToolOutput(
-                type="result",
-                data={"error": f"Task not found: {task_id}"},
-                result_for_assistant=f"Error: Task not found: {task_id}",
-            )
-            return
+        start_time = time.monotonic()
 
-        entry.status = "cancelled"
-        yield ToolOutput(
-            type="result",
-            data={
-                "event": "task_cancelled",
-                "task_id": task_id,
-                "status": "cancelled",
-            },
-            result_for_assistant=f"Task cancelled: [{task_id}] {entry.description}",
+        session = SessionManager(
+            tools=tools,
+            initial_messages=messages,
+            permission_context=PermissionContext(mode=PermissionMode.ACCEPT_EDITS),
+            model=model,
+            system_prompt=system_prompt,
         )
+
+        options = QueryOptions(
+            model=model,
+            cwd=str(os.getcwd()),
+        )
+
+        tool_use_count = 0
+
+        try:
+            async for event in query_core(
+                messages=session.get_messages(),
+                system_prompt=system_prompt,
+                tools=tools,
+                session=session,
+                options=options,
+            ):
+                event_type = getattr(event, "type", None)
+                if event_type is not None and str(event_type) == "tool_use":
+                    tool_use_count += 1
+
+                # Update messages in the background task record
+                sub_messages = session.get_messages()
+                update_background_agent_task(
+                    agent_id,
+                    total_tool_use_count=tool_use_count,
+                )
+
+            duration_ms = int((time.monotonic() - start_time) * 1000)
+            sub_messages = session.get_messages()
+            result_text = _extract_assistant_text(sub_messages)
+
+            # Save transcript
+            save_agent_transcript(agent_id, sub_messages)
+
+            update_background_agent_task(
+                agent_id,
+                status=BackgroundAgentStatus.COMPLETED,
+                result_text=result_text,
+                total_tool_use_count=tool_use_count,
+                total_duration_ms=duration_ms,
+            )
+
+        except Exception as exc:
+            logger.exception("Background SubAgent %s failed", agent_id)
+            update_background_agent_task(
+                agent_id,
+                status=BackgroundAgentStatus.FAILED,
+                error=str(exc),
+            )
 
     def render_result_for_assistant(self, output: Any) -> str | list[Any]:
         if isinstance(output, dict) and "error" in output:
