@@ -305,6 +305,8 @@ class TaskTool(Tool):
                 tools=tools,
                 messages=messages,
                 subagent_type=input.subagent_type,
+                agent_config=agent_config,
+                parent_session=context.session,
             ):
                 yield output
         else:
@@ -317,6 +319,7 @@ class TaskTool(Tool):
                 tools=tools,
                 messages=messages,
                 context=context,
+                agent_config=agent_config,
             ):
                 yield output
 
@@ -335,11 +338,11 @@ class TaskTool(Tool):
         tools: list[Tool],
         messages: list[dict[str, Any]],
         context: ToolUseContext,
+        agent_config: Any,
     ) -> AsyncGenerator[ToolOutput, None]:
         """Run sub-agent synchronously, yielding progress then result."""
         from pode_agent.app.query import query_core
-        from pode_agent.app.session import SessionManager
-        from pode_agent.core.permissions.types import PermissionContext, PermissionMode
+        from pode_agent.app.sub_session import create_sub_session
 
         start_time = time.monotonic()
 
@@ -349,14 +352,27 @@ class TaskTool(Tool):
             content=f"[Agent {agent_id} starting: {description}]",
         )
 
-        # Create sub-session
-        session = SessionManager(
-            tools=tools,
-            initial_messages=messages,
-            permission_context=PermissionContext(mode=PermissionMode.ACCEPT_EDITS),
-            model=model,
-            system_prompt=system_prompt,
-        )
+        # Create sub-session using factory (proper permission mapping + system prompt)
+        parent_session = context.session
+        if parent_session is not None:
+            session = create_sub_session(
+                parent_session=parent_session,
+                agent_config=agent_config,
+                tools=tools,
+                initial_messages=messages,
+            )
+        else:
+            # Fallback when no parent session (e.g. isolated test)
+            from pode_agent.app.session import SessionManager
+            from pode_agent.core.permissions.types import PermissionContext, PermissionMode
+
+            session = SessionManager(
+                tools=tools,
+                initial_messages=messages,
+                permission_context=PermissionContext(mode=PermissionMode.ACCEPT_EDITS),
+                model=model,
+                system_prompt=system_prompt,
+            )
 
         tool_use_count = 0
         last_progress_time = 0.0
@@ -448,6 +464,8 @@ class TaskTool(Tool):
         tools: list[Tool],
         messages: list[dict[str, Any]],
         subagent_type: str,
+        agent_config: Any,
+        parent_session: Any,
     ) -> AsyncGenerator[ToolOutput, None]:
         """Launch sub-agent as a background task, return immediately."""
         # Register background task
@@ -466,6 +484,8 @@ class TaskTool(Tool):
                 system_prompt=system_prompt,
                 tools=tools,
                 messages=messages,
+                agent_config=agent_config,
+                parent_session=parent_session,
             )
         )
 
@@ -492,22 +512,34 @@ class TaskTool(Tool):
         system_prompt: str,
         tools: list[Tool],
         messages: list[dict[str, Any]],
+        agent_config: Any,
+        parent_session: Any,
     ) -> None:
         """Run sub-agent in background, updating task registry."""
         from pode_agent.app.query import QueryOptions, query_core
-        from pode_agent.app.session import SessionManager
-        from pode_agent.core.permissions.types import PermissionContext, PermissionMode
+        from pode_agent.app.sub_session import create_sub_session
         from pode_agent.types.agent import BackgroundAgentStatus
 
         start_time = time.monotonic()
 
-        session = SessionManager(
-            tools=tools,
-            initial_messages=messages,
-            permission_context=PermissionContext(mode=PermissionMode.ACCEPT_EDITS),
-            model=model,
-            system_prompt=system_prompt,
-        )
+        if parent_session is not None:
+            session = create_sub_session(
+                parent_session=parent_session,
+                agent_config=agent_config,
+                tools=tools,
+                initial_messages=messages,
+            )
+        else:
+            from pode_agent.app.session import SessionManager
+            from pode_agent.core.permissions.types import PermissionContext, PermissionMode
+
+            session = SessionManager(
+                tools=tools,
+                initial_messages=messages,
+                permission_context=PermissionContext(mode=PermissionMode.ACCEPT_EDITS),
+                model=model,
+                system_prompt=system_prompt,
+            )
 
         options = QueryOptions(
             model=model,

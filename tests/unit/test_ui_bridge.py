@@ -199,28 +199,40 @@ class TestEventToNotification:
 
 
 class TestEnsureSessionToolLoading:
-    def test_ensure_session_loads_builtin_tools(self) -> None:
-        """_ensure_session() should create ToolLoader and call _load_builtin_tools."""
-        from unittest.mock import patch
+    def test_ensure_session_loads_all_tools(self) -> None:
+        """_ensure_session() should create ToolLoader and call load_all."""
+        from unittest.mock import AsyncMock, patch
 
         mock_loader = MagicMock()
+        mock_loader.load_all = AsyncMock()
         mock_registry = MagicMock()
         mock_registry.tools = []
 
         with (
-            patch("pode_agent.core.tools.registry.ToolRegistry", return_value=mock_registry),
-            patch("pode_agent.core.tools.loader.ToolLoader", return_value=mock_loader),
+            patch(
+                "pode_agent.core.tools.registry.ToolRegistry",
+                return_value=mock_registry,
+            ),
+            patch(
+                "pode_agent.core.tools.loader.ToolLoader",
+                return_value=mock_loader,
+            ),
             patch(
                 "pode_agent.core.config.loader.get_global_config",
                 return_value=MagicMock(default_model_name="test-model"),
             ),
+            patch(
+                "pode_agent.services.ai.factory.validate_provider_config",
+                return_value=[],  # Skip validation in tool-loading test
+            ),
         ):
             bridge = UIBridge.__new__(UIBridge)
             bridge._session = None
+            bridge._read_stream = None
+            bridge._write_stream = None
             bridge._server = None
-            bridge._running = False
 
-            session = bridge._ensure_session()
+            session = asyncio.run(bridge._ensure_session())
 
-            mock_loader._load_builtin_tools.assert_called_once()
+            mock_loader.load_all.assert_called_once()
             assert session is not None

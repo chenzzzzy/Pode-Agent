@@ -193,23 +193,31 @@ class TestConfigList:
 
 
 class TestToolLoaderIntegration:
+    @patch("pode_agent.core.config.loader.get_global_config")
     @patch("pode_agent.core.tools.loader.ToolLoader")
     @patch("pode_agent.core.tools.registry.ToolRegistry")
-    @patch("pode_agent.entrypoints.cli.asyncio")
     def test_tool_loader_called_on_print_mode(
         self,
-        mock_asyncio: MagicMock,
         mock_registry_cls: MagicMock,
         mock_loader_cls: MagicMock,
+        mock_get_config: MagicMock,
     ) -> None:
-        """ToolLoader._load_builtin_tools() should be called in print mode."""
-        mock_asyncio.run.return_value = 0
+        """ToolLoader.load_all() should be called in print mode."""
+        import asyncio as real_asyncio
+        from unittest.mock import AsyncMock
+
         mock_registry = MagicMock()
         mock_registry.tools = []
         mock_registry_cls.return_value = mock_registry
         mock_loader = MagicMock()
+        mock_loader.load_all = AsyncMock()
         mock_loader_cls.return_value = mock_loader
+        mock_get_config.return_value = MagicMock(default_model_name="test-model")
 
-        result = runner.invoke(app, ["test prompt"])
+        with patch("pode_agent.app.print_mode.run_print_mode", new_callable=AsyncMock, return_value=0):
+            with patch("pode_agent.entrypoints.cli.asyncio") as mock_aio:
+                mock_aio.run = real_asyncio.run
+                result = runner.invoke(app, ["test prompt"])
+
         assert result.exit_code == 0
-        mock_loader._load_builtin_tools.assert_called_once()
+        mock_loader.load_all.assert_called_once()

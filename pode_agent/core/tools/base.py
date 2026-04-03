@@ -72,6 +72,7 @@ class ToolUseContext(BaseModel):
     abort_event: asyncio.Event | None = None
     read_file_timestamps: dict[str, float] = Field(default_factory=dict)
     options: ToolOptions = ToolOptions()
+    session: Any = None  # SessionManager reference for tools that need it
 
 
 class ValidationResult(BaseModel):

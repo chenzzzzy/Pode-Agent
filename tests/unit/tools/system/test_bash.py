@@ -127,7 +127,11 @@ class TestBashToolCall:
 
     @pytest.mark.asyncio
     async def test_handles_timeout(self) -> None:
-        inp = BashInput(command="sleep 10", timeout=500)  # 0.5s timeout
+        # Use python for cross-platform sleep (Windows lacks 'sleep' command)
+        inp = BashInput(
+            command='python -c "import time; time.sleep(30)"',
+            timeout=500,
+        )
         outputs = [o async for o in self.tool.call(inp, _context())]
         result = _find_result(outputs)
         assert result.data["timed_out"] is True

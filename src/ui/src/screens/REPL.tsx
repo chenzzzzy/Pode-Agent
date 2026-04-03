@@ -11,7 +11,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from "react"
-import { Box, Static, Text, useApp } from "ink"
+import { Box, Static, Text, useApp, useInput } from "ink"
 import type { JsonRpcPeer } from "../rpc/client.js"
 import type { Theme, Message, PermissionDecision } from "../types.js"
 import type { PlanState } from "../hooks/useSession.js"
@@ -21,8 +21,6 @@ import { Spinner } from "../components/Spinner.js"
 import { PromptInput } from "../components/PromptInput.js"
 import { Message as MessageComponent } from "../components/Message.js"
 import { PermissionRequest } from "../components/permissions/PermissionRequest.js"
-import { useExitOnCtrlCD } from "../hooks/useExitOnCtrlCD.js"
-import { useCancelRequest } from "../hooks/useCancelRequest.js"
 import {
   normalizeMessages,
   reorderMessages,
@@ -55,11 +53,12 @@ export function REPL({ peer, theme, initialPrompt, verbose, safeMode }: REPLProp
   const [showWelcome, setShowWelcome] = useState(true)
   const [sessionStart] = useState(() => Date.now())
 
-  // Ctrl+C/D handling
-  useExitOnCtrlCD()
-
-  // ESC to cancel
-  useCancelRequest(isLoading, abort)
+  // ESC - cancel if loading (global handler; PromptInput has its own useInput)
+  useInput((_input, key) => {
+    if (key.escape && isLoading) {
+      abort()
+    }
+  })
 
   // Handle initial prompt
   useEffect(() => {
@@ -158,13 +157,6 @@ export function REPL({ peer, theme, initialPrompt, verbose, safeMode }: REPLProp
       {isLoading && !toolUseConfirm && (
         <Box marginTop={1}>
           <Spinner label="Thinking..." color={theme.thinking} />
-        </Box>
-      )}
-
-      {/* Error display */}
-      {lastError && !isLoading && (
-        <Box marginTop={1}>
-          <Text color={theme.error}>Last error: {lastError}</Text>
         </Box>
       )}
 

@@ -303,3 +303,118 @@ async def query_llm(
     provider = ModelAdapterFactory.get_provider(params.model, config)
     async for response in provider.query(params):
         yield response
+
+
+# ---------------------------------------------------------------------------
+# Provider configuration validation
+# ---------------------------------------------------------------------------
+
+# Map provider type → (sdk_module, env_var_name, pip_package, display_name)
+_PROVIDER_SDK_INFO: dict[ProviderType, tuple[str, str, str, str]] = {
+    ProviderType.ANTHROPIC: (
+        "anthropic",
+        "ANTHROPIC_API_KEY",
+        "anthropic",
+        "Anthropic",
+    ),
+    ProviderType.OPENAI: (
+        "openai",
+        "OPENAI_API_KEY",
+        "openai",
+        "OpenAI",
+    ),
+    ProviderType.OPENAI_COMPAT: (
+        "openai",
+        "OPENAI_API_KEY",
+        "openai",
+        "OpenAI-compatible",
+    ),
+}
+
+
+def validate_provider_config(
+    model_name: str,
+    config: GlobalConfig | None = None,
+) -> list[str]:
+    """Validate that the configured LLM provider is ready to use.
+
+    Checks:
+    1. Model name can be resolved to a provider type
+    2. Required SDK is importable
+    3. API key is available (env var or config profile)
+
+    Returns:
+        List of validation error messages (empty if valid).
+    """
+    errors: list[str] = []
+
+    # 1. Resolve provider type
+    try:
+        provider_type = ModelAdapterFactory._resolve_provider_type(model_name)
+    except ValueError:
+        errors.append(
+            f"Unknown model: '{model_name}'. "
+            f"Supported prefixes: claude-, gpt-, o1-, o3-, qwen-, deepseek-, glm-, moonshot-"
+        )
+        return errors
+
+    sdk_info = _PROVIDER_SDK_INFO.get(provider_type)
+    if sdk_info is None:
+        # Provider type exists but no SDK validation info (e.g. ollama local)
+        return errors
+
+    sdk_module, env_var, pip_package, display_name = sdk_info
+
+    # 2. Check SDK importability
+    import importlib
+
+    try:
+        importlib.import_module(sdk_module)
+    except ImportError:
+        errors.append(
+            f"{display_name} SDK not installed. Install it with: "
+            f"uv pip install {pip_package}"
+        )
+        return errors  # No point checking API key if SDK is missing
+
+    # 3. Check API key availability
+    api_key_found = False
+
+    # Check environment variable
+    if os.environ.get(env_var):
+        api_key_found = True
+
+    # Check DASHSCOPE_API_KEY for openai-compat (Alibaba Cloud)
+    if (
+        not api_key_found
+        and provider_type == ProviderType.OPENAI_COMPAT
+        and os.environ.get("DASHSCOPE_API_KEY")
+    ):
+        api_key_found = True
+
+    # Check config model profiles
+    if not api_key_found and config:
+        for profile in config.model_profiles:
+            if (
+                profile.model_name == model_name
+                or profile.name == model_name
+                or profile.provider == provider_type
+            ) and profile.api_key:
+                api_key_found = True
+                break
+
+    if not api_key_found:
+        if provider_type == ProviderType.OPENAI_COMPAT:
+            errors.append(
+                f"API key not configured for {display_name} provider (model: {model_name}). "
+                f"Set one of: OPENAI_API_KEY, DASHSCOPE_API_KEY, or add an api_key "
+                f"to a model_profile in ~/.pode/config.json"
+            )
+        else:
+            errors.append(
+                f"API key not configured for {display_name}. "
+                f"Set the {env_var} environment variable, or add an api_key "
+                f"to a model_profile in ~/.pode/config.json"
+            )
+
+    return errors

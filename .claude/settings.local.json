@@ -1,0 +1,36 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git:*)",
+      "Bash(cd:*)",
+      "Bash(find D:duyanai_agentPode-agent -maxdepth 4 -name *.py -type f)",
+      "Bash(find D:duyanai_agentPode-agent -name *.py -not -path *__pycache__* -not -path *.git* -exec wc -l {} +)",
+      "Bash(pip install:*)",
+      "Bash(pode --help)",
+      "Bash(pode --version)",
+      "Bash(pode config:*)",
+      "Bash(python -m mypy pode_agent/)",
+      "Bash(python -m ruff check pode_agent/)",
+      "Bash(python -m ruff check --fix pode_agent/)",
+      "Bash(python -m pytest tests/ -v)",
+      "Bash(python -m ruff check pode_agent/ tests/)",
+      "Bash(python -m mypy pode_agent/ tests/)",
+      "Bash(python -m black --check pode_agent/ tests/)",
+      "Bash(python -m pytest tests/ --cov=pode_agent --cov-report=term-missing)",
+      "Bash(python -c \"from pode_agent.core.tools.base import ToolUseContext; t1 = ToolUseContext\\(\\); t1.read_file_timestamps[''x''] = 1.0; t2 = ToolUseContext\\(\\); print\\(''SHARED_MUTATION:'', ''x'' in t2.read_file_timestamps\\)\")",
+      "Bash(python -c \"from pode_agent.core.tools.base import ToolResult; t1 = ToolResult\\(\\); t1.new_messages.append\\(''x''\\); t2 = ToolResult\\(\\); print\\(''SHARED_MUTATION:'', ''x'' in t2.new_messages\\)\")",
+      "Bash(uv run:*)",
+      "Bash(python:*)",
+      "Bash(.venv/Scripts/python.exe -m pip install -e \".[dev]\")",
+      "Bash(C:/Users/CZY/.local/bin/uv.exe pip:*)",
+      "WebSearch",
+      "Bash(chcp 65001)",
+      "Bash(PYTHONIOENCODING=utf-8 python -c \":*)",
+      "Bash(uv pip:*)",
+      "Bash(uv run python -c \":*)",
+      "Bash(tasklist /FI \"IMAGENAME eq python.exe\")",
+      "Bash(bun run:*)",
+      "Bash(bun test:*)"
+    ]
+  }
+}

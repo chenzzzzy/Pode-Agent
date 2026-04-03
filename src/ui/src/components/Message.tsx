@@ -17,6 +17,7 @@ import type {
   UserTextMessage,
   UserToolResultMessage,
   TaskProgressMessage,
+  ErrorMessage,
 } from "../types.js"
 
 export interface MessageProps {
@@ -151,6 +152,33 @@ function AssistantMessageRenderer({
               {step.title}
             </Text>
           ))}
+        </Box>
+      )
+    }
+    case "error": {
+      const m = message as ErrorMessage
+      return (
+        <Box
+          flexDirection="column"
+          marginTop={1}
+          paddingX={1}
+          borderStyle="round"
+          borderColor={theme.error}
+        >
+          <Text color={theme.error} bold>
+            ⚠ Error
+          </Text>
+          <Text color={theme.error}>{m.error}</Text>
+          {m.isRetryable && (
+            <Text color={theme.warning}>  (retryable — try again)</Text>
+          )}
+          {m.hint && (
+            <Box marginTop={1}>
+              <Text color={theme.warning} bold>
+                💡 {m.hint}
+              </Text>
+            </Box>
+          )}
         </Box>
       )
     }

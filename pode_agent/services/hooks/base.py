@@ -68,6 +68,7 @@ class HookState(BaseModel):
 
     additional_system_prompts: list[str] = Field(default_factory=list)
     user_prompt_hooks_ran: bool = False
+    hook_configs: list[HookConfig] = Field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------

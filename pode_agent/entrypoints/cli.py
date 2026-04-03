@@ -10,8 +10,11 @@ Reference: docs/modules.md — Entrypoints layer
 from __future__ import annotations
 
 import asyncio
+import os
+from pathlib import Path
 
 import typer
+from dotenv import load_dotenv
 
 from pode_agent import __version__
 from pode_agent.core.config import (
@@ -21,6 +24,9 @@ from pode_agent.core.config import (
     set_config_for_cli,
 )
 from pode_agent.core.config.schema import DEFAULT_MODEL_NAME
+
+# Load .env from the current working directory before any LLM calls
+load_dotenv(Path.cwd() / ".env")
 
 app = typer.Typer(
     name="pode",
@@ -85,14 +91,19 @@ def main(
     if prompt:
         # Print mode: run single query
         from pode_agent.app.print_mode import PrintModeOptions, run_print_mode
+        from pode_agent.core.config.loader import get_global_config
         from pode_agent.core.tools.loader import ToolLoader
         from pode_agent.core.tools.registry import ToolRegistry
 
-        # Collect available tools
-        registry = ToolRegistry()
-        loader = ToolLoader(registry)
-        loader._load_builtin_tools()
-        tools = registry.tools
+        async def _run_print(
+            p: str, opts: PrintModeOptions,
+        ) -> int:
+            config = get_global_config()
+            registry = ToolRegistry()
+            loader = ToolLoader(registry, config=config)
+            await loader.load_all()
+            tools = registry.tools
+            return await run_print_mode(p, tools, opts)
 
         opts = PrintModeOptions(
             model=model,
@@ -101,7 +112,7 @@ def main(
             safe_mode=safe_mode,
         )
 
-        exit_code = asyncio.run(run_print_mode(prompt, tools, opts))
+        exit_code = asyncio.run(_run_print(prompt, opts))
         raise typer.Exit(code=exit_code)
 
     # Interactive REPL: spawn Bun + Ink UI with JSON-RPC bridge
@@ -117,19 +128,29 @@ async def _launch_repl(*, model: str = DEFAULT_MODEL_NAME, safe_mode: bool = Fal
 
     Architecture::
 
-        Python (parent)  ─── pipe stdin/stdout ───  Bun (child, Ink UI)
-        UIBridge reads from Bun.stdout, writes to Bun.stdin
-        Bun reads from pipe.stdin, writes to pipe.stdout
+        Python (parent)  ─── TCP socket (JSON-RPC) ───  Bun (child, Ink UI)
+        UIBridge listens on a port, Bun connects to it
+        Bun's stdin/stdout remain connected to TTY for user input
 
     Steps:
-        1. Check Bun is installed
-        2. Locate the Ink UI entry point (src/ui/src/index.tsx)
-        3. Spawn Bun as child process with stdin/stdout piped
-        4. Run UIBridge using the child process's stdin/stdout
-        5. Clean up on exit
+        1. Start TCP server on random port for JSON-RPC
+        2. Check Bun is installed
+        3. Locate the Ink UI entry point (src/ui/src/index.tsx)
+        4. Spawn Bun as child process with PODE_RPC_PORT env var
+        5. Accept connection from Bun and run UIBridge
+        6. Clean up on exit
     """
     import shutil
+    import socket
     from pathlib import Path
+
+    # Start TCP server for JSON-RPC
+    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    server.bind(("127.0.0.1", 0))  # Bind to random port
+    server.listen(1)
+    rpc_port = server.getsockname()[1]
+    server.setblocking(False)
 
     # Check Bun installation
     bun_path = shutil.which("bun")
@@ -167,25 +188,45 @@ async def _launch_repl(*, model: str = DEFAULT_MODEL_NAME, safe_mode: bool = Fal
             typer.echo("Error: Failed to install UI dependencies.", err=True)
             return 1
 
-    # Spawn Bun process
+    # Spawn Bun process with TTY stdin/stdout and RPC port
+    # Bun inherits the parent's TTY for user input
     proc = await asyncio.create_subprocess_exec(
         bun_path, "run", str(ui_entry),
-        stdin=asyncio.subprocess.PIPE,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
+        stdin=None,   # inherit TTY
+        stdout=None,  # inherit TTY
+        stderr=None,  # inherit TTY
         cwd=str(ui_dir),
+        env={**os.environ, "PODE_RPC_PORT": str(rpc_port)},
     )
 
-    if proc.stdin is None or proc.stdout is None:
-        typer.echo("Error: Failed to pipe Bun process stdin/stdout.", err=True)
+    # Wait for Bun to connect to our RPC server
+    try:
+        loop = asyncio.get_event_loop()
+        conn, _addr = await asyncio.wait_for(
+            loop.sock_accept(server),
+            timeout=30.0,
+        )
+    except TimeoutError:
+        typer.echo("Error: Timed out waiting for UI to connect.", err=True)
+        if proc.returncode is None:
+            proc.kill()
         return 1
 
-    # Run UI bridge — read from Bun's stdout, write to Bun's stdin
+    # Wrap the accepted socket for async I/O
+    # connect_accepted_socket returns (transport, protocol)
+    reader = asyncio.StreamReader()
+    protocol = asyncio.StreamReaderProtocol(reader)
+    transport, _ = await loop.connect_accepted_socket(lambda: protocol, conn)
+
+    # Create StreamWriter with the transport (not the raw socket!)
+    writer = asyncio.StreamWriter(transport, protocol, reader, loop)
+
+    # Run UI bridge — read/write via the socket
     from pode_agent.entrypoints.ui_bridge import UIBridge
 
     bridge = UIBridge(
-        read_stream=proc.stdout,
-        write_stream=proc.stdin,
+        read_stream=reader,
+        write_stream=writer,
     )
 
     try:
@@ -193,6 +234,9 @@ async def _launch_repl(*, model: str = DEFAULT_MODEL_NAME, safe_mode: bool = Fal
     except KeyboardInterrupt:
         pass
     finally:
+        writer.close()
+        await writer.wait_closed()
+        server.close()
         if proc.returncode is None:
             proc.terminate()
             try:

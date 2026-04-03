@@ -76,7 +76,16 @@ _EVENT_MAP: dict[
 ] = {
     SessionEventType.USER_MESSAGE: (
         "session/user_message",
-        lambda e: {"text": e.data.get("text", "") if e.data else ""},
+        lambda e: {
+            "text": (
+                e.data.get("message", {}).get("message", "")
+                if isinstance(e.data.get("message"), dict)
+                else e.data.get("text", "")
+            )
+            if e.data
+            else "",
+            "message_id": e.message_id or "",
+        },
     ),
     SessionEventType.ASSISTANT_DELTA: (
         "session/assistant_delta",
@@ -170,6 +179,42 @@ _EVENT_MAP: dict[
         lambda e: {
             "plan_id": e.data.get("plan_id", "") if e.data else "",
             "reason": e.data.get("reason") if e.data else None,
+        },
+    ),
+    SessionEventType.SUB_AGENT_STARTED: (
+        "sub_agent/started",
+        lambda e: {
+            "agent_id": e.data.get("agent_id", "") if e.data else "",
+            "subagent_type": e.data.get("subagent_type", "") if e.data else "",
+            "description": e.data.get("description", "") if e.data else "",
+        },
+    ),
+    SessionEventType.SUB_AGENT_PROGRESS: (
+        "sub_agent/progress",
+        lambda e: {
+            "agent_id": e.data.get("agent_id", "") if e.data else "",
+            "tool_use_count": e.data.get("tool_use_count", 0) if e.data else 0,
+            "duration_ms": e.data.get("duration_ms", 0) if e.data else 0,
+        },
+    ),
+    SessionEventType.SUB_AGENT_COMPLETED: (
+        "sub_agent/completed",
+        lambda e: {
+            "agent_id": e.data.get("agent_id", "") if e.data else "",
+            "subagent_type": e.data.get("subagent_type", "") if e.data else "",
+            "description": e.data.get("description", "") if e.data else "",
+            "result_text": e.data.get("result_text", "") if e.data else "",
+            "tool_use_count": e.data.get("tool_use_count", 0) if e.data else 0,
+            "duration_ms": e.data.get("duration_ms", 0) if e.data else 0,
+        },
+    ),
+    SessionEventType.SUB_AGENT_FAILED: (
+        "sub_agent/failed",
+        lambda e: {
+            "agent_id": e.data.get("agent_id", "") if e.data else "",
+            "subagent_type": e.data.get("subagent_type", "") if e.data else "",
+            "description": e.data.get("description", "") if e.data else "",
+            "error": e.data.get("error", "") if e.data else "",
         },
     ),
 }
@@ -354,23 +399,54 @@ class UIBridge:
         finally:
             logger.info("UI bridge shutting down")
 
-    def _ensure_session(self) -> SessionManager:
+    async def _ensure_session(self) -> SessionManager:
         """Lazy-initialize SessionManager on first use."""
         if self._session is None:
-            from pode_agent.core.tools.loader import ToolLoader
-            from pode_agent.core.tools.registry import ToolRegistry
+            import os
+            from pathlib import Path
 
-            registry = ToolRegistry()
-            loader = ToolLoader(registry)
-            loader._load_builtin_tools()
-            tools = registry.tools
+            from dotenv import load_dotenv
 
             from pode_agent.core.config.loader import get_global_config
+            from pode_agent.core.tools.loader import ToolLoader
+            from pode_agent.core.tools.registry import ToolRegistry
+            from pode_agent.services.ai.factory import validate_provider_config
+
+            # Ensure .env is loaded (belt-and-suspenders with cli.py)
+            load_dotenv(Path.cwd() / ".env")
 
             config = get_global_config()
+            model_name = config.default_model_name
+
+            # Auto-detect model from env if the default model has no API key
+            errors = validate_provider_config(model_name, config)
+            if errors:
+                # Try to find a working model from environment variables
+                env_model = os.environ.get("DASHSCOPE_MODEL", "").strip()
+                if env_model:
+                    alt_errors = validate_provider_config(env_model, config)
+                    if not alt_errors:
+                        model_name = env_model
+                        errors = []
+                        logger.info(
+                            "Default model unavailable, using DASHSCOPE_MODEL=%s", env_model,
+                        )
+
+            if errors:
+                raise JsonRpcError(
+                    -32001,
+                    "LLM provider not configured: " + "; ".join(errors),
+                    data={"setup_hints": errors, "model": model_name},
+                )
+
+            registry = ToolRegistry()
+            loader = ToolLoader(registry, config=config)
+            await loader.load_all()
+            tools = registry.tools
+
             self._session = SessionManager(
                 tools=tools,
-                model=config.default_model_name,
+                model=model_name,
             )
         return self._session
 
@@ -382,14 +458,26 @@ class UIBridge:
         if not prompt:
             raise JsonRpcError(-32602, "Missing 'prompt'")
 
-        session = self._ensure_session()
+        session = await self._ensure_session()
         assert self._server is not None
 
         # Process input and forward events as notifications
-        async for event in session.process_input(prompt):
-            method, event_params = event_to_notification(event)
-            self._server.send_notification(method, event_params)
-            # Async flush for notifications
+        try:
+            async for event in session.process_input(prompt):
+                method, event_params = event_to_notification(event)
+                self._server.send_notification(method, event_params)
+                # Async flush for notifications
+                if self._write_stream is not None:
+                    with contextlib.suppress(Exception):
+                        await self._write_stream.drain()
+        except Exception as exc:
+            logger.exception("_handle_submit crashed: %s", exc)
+            # Send error + done so the UI is never stuck
+            self._server.send_notification(
+                "session/model_error",
+                {"error": f"Internal error: {exc}", "is_retryable": False},
+            )
+            self._server.send_notification("session/done", {})
             if self._write_stream is not None:
                 with contextlib.suppress(Exception):
                     await self._write_stream.drain()

@@ -143,6 +143,8 @@ class SlashCommandTool(Tool):
                 result_for_assistant=_HELP_TEXT,
             )
         elif cmd == "clear":
+            if context.session is not None:
+                context.session._messages.clear()
             yield ToolOutput(
                 type="result",
                 data={"command": "clear", "message": "Session cleared"},

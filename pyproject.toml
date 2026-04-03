@@ -42,6 +42,8 @@ dependencies = [
     # LLM Providers
     "anthropic>=0.40.0",
     "openai>=1.30.0",
+    # Environment
+    "python-dotenv>=1.0.0",
 ]
 
 [project.optional-dependencies]
@@ -59,6 +61,8 @@ dev = [
 
 [project.scripts]
 pode = "pode_agent.entrypoints.cli:run"
+pode-mcp = "pode_agent.entrypoints.mcp_server:main"
+pode-acp = "pode_agent.entrypoints.acp_server:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["pode_agent"]

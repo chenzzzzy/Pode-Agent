@@ -78,6 +78,16 @@ export interface TaskProgressMessage extends BaseMessage {
   steps: PlanStepState[]
 }
 
+// --- Error messages ---
+
+export interface ErrorMessage extends BaseMessage {
+  role: "assistant"
+  type: "error"
+  error: string
+  isRetryable?: boolean
+  hint?: string
+}
+
 // --- Union types ---
 
 export type Message =
@@ -87,6 +97,7 @@ export type Message =
   | UserTextMessage
   | UserToolResultMessage
   | TaskProgressMessage
+  | ErrorMessage
 
 // --- Permission types ---
 

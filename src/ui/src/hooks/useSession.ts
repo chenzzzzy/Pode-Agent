@@ -18,6 +18,7 @@ import type {
   UserTextMessage,
   UserToolResultMessage,
   TaskProgressMessage,
+  ErrorMessage,
   PlanStepState,
   ToolUseConfirm,
   PermissionDecision,
@@ -50,17 +51,10 @@ export function useSession(peer: JsonRpcPeer) {
 
   // Register notification handlers
   useEffect(() => {
-    // session/user_message
-    peer.registerMethod("session/user_message", (params: unknown) => {
-      const p = params as { text: string; message_id?: string }
-      const msg: UserTextMessage = {
-        id: p.message_id ?? makeId(),
-        role: "user",
-        type: "text",
-        text: p.text,
-        timestamp: Date.now(),
-      }
-      setMessages((prev) => [...prev, msg])
+    // session/user_message — backend confirmation; skip if we already added it locally
+    peer.registerMethod("session/user_message", (_params: unknown) => {
+      // User message is already added locally in submit(), so ignore the backend echo
+      // to avoid duplicate messages in the UI.
     })
 
     // session/assistant_delta — streaming text
@@ -197,11 +191,25 @@ export function useSession(peer: JsonRpcPeer) {
     peer.registerMethod("session/model_error", (params: unknown) => {
       const p = params as { error: string; is_retryable?: boolean }
       setLastError(p.error)
-      const msg: AssistantTextMessage = {
+
+      // Provide helpful hints for common errors
+      let hint: string | undefined
+      const errLower = p.error.toLowerCase()
+      if (errLower.includes("authentication") || errLower.includes("api key") || errLower.includes("unauthorized")) {
+        hint = "Set your API key: export ANTHROPIC_API_KEY=sk-... or run: pode config set api_key <key>"
+      } else if (errLower.includes("rate limit")) {
+        hint = "Rate limited — wait a moment and try again."
+      } else if (errLower.includes("connection")) {
+        hint = "Check your network connection and proxy settings."
+      }
+
+      const msg: ErrorMessage = {
         id: makeId(),
         role: "assistant",
-        type: "text",
-        text: `Error: ${p.error}${p.is_retryable ? " (retryable)" : ""}`,
+        type: "error",
+        error: p.error,
+        isRetryable: p.is_retryable,
+        hint,
         timestamp: Date.now(),
       }
       setMessages((prev) => [...prev, msg])
@@ -341,6 +349,16 @@ export function useSession(peer: JsonRpcPeer) {
       setToolUseConfirm(null)
       setLastError(null)
 
+      // Immediately add user message locally so it's visible right away
+      const userMsg: UserTextMessage = {
+        id: makeId(),
+        role: "user",
+        type: "text",
+        text: prompt,
+        timestamp: Date.now(),
+      }
+      setMessages((prev) => [...prev, userMsg])
+
       try {
         await peer.sendRequest({
           method: "session/submit",
@@ -348,11 +366,25 @@ export function useSession(peer: JsonRpcPeer) {
         })
       } catch (err) {
         setIsLoading(false)
-        const msg: AssistantTextMessage = {
+
+        // Check for LLM setup validation errors from the backend
+        const rpcErr = err as { code?: number; message?: string; data?: { setup_hints?: string[]; model?: string } }
+        let errorText = err instanceof Error ? err.message : String(err)
+        let hint: string | undefined
+
+        if (rpcErr?.data?.setup_hints) {
+          // LLM provider validation failed — show setup instructions
+          errorText = `LLM provider not configured (model: ${rpcErr.data.model ?? "unknown"})`
+          hint = rpcErr.data.setup_hints.join("\n")
+        }
+
+        const msg: ErrorMessage = {
           id: makeId(),
           role: "assistant",
-          type: "text",
-          text: `Failed to submit: ${err instanceof Error ? err.message : String(err)}`,
+          type: "error",
+          error: errorText,
+          hint,
+          isRetryable: false,
           timestamp: Date.now(),
         }
         setMessages((prev) => [...prev, msg])

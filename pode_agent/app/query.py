@@ -136,15 +136,31 @@ async def query(
         message_id=user_msg["uuid"],
     )
 
-    # Delegate to recursive loop
-    async for event in query_core(
-        messages=session.get_messages(),
-        system_prompt=system_prompt,
-        tools=tools,
-        session=session,
-        options=options,
-    ):
-        yield event
+    # Delegate to recursive loop — guarantee DONE is always emitted
+    done_emitted = False
+    try:
+        async for event in query_core(
+            messages=session.get_messages(),
+            system_prompt=system_prompt,
+            tools=tools,
+            session=session,
+            options=options,
+        ):
+            if event.type == SessionEventType.DONE:
+                done_emitted = True
+            yield event
+    except Exception as exc:
+        logger.exception("Unhandled error in query_core: %s", exc)
+        yield SessionEvent(
+            type=SessionEventType.MODEL_ERROR,
+            data={"error": f"Internal error: {exc}", "is_retriable": False},
+        )
+    finally:
+        if not done_emitted:
+            yield SessionEvent(
+                type=SessionEventType.DONE,
+                data={"reason": "error_recovery"},
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -194,10 +210,36 @@ async def query_core(
     # Step 1b: Hook state (Phase 5)
     hook_state = _hook_state or HookState()
 
+    # Step 1b2: Load hook configs once (Fix 1)
+    if not hook_state.hook_configs:
+        from pode_agent.core.config.loader import get_global_config
+        from pode_agent.services.hooks.runner import load_hook_configs
+
+        cfg = get_global_config()
+        hook_state.hook_configs = load_hook_configs(user_settings=cfg.model_dump())
+
     # Step 1c: UserPromptSubmit hooks (only on first entry)
-    await run_user_prompt_submit_hooks(
-        "", messages, hook_state,
+    # Extract prompt text from messages (Fix 8)
+    prompt_text = ""
+    for msg in reversed(messages):
+        if msg.get("type") == "user" or msg.get("role") == "user":
+            content = msg.get("message", msg.get("content", ""))
+            if isinstance(content, str):
+                prompt_text = content
+            break
+
+    user_hook_result = await run_user_prompt_submit_hooks(
+        prompt_text, messages, hook_state, configs=hook_state.hook_configs,
     )
+    if user_hook_result.action == "block":
+        yield SessionEvent(
+            type=SessionEventType.DONE,
+            data={
+                "reason": "blocked_by_hook",
+                "message": user_hook_result.message,
+            },
+        )
+        return
 
     # 1. Build system prompt with dynamic assembly (Phase 3)
     full_system_prompt = build_system_prompt(
@@ -281,6 +323,10 @@ async def query_core(
                     "is_retriable": resp.is_retriable,
                 },
             )
+            yield SessionEvent(
+                type=SessionEventType.DONE,
+                data={"reason": "model_error"},
+            )
             return
 
     # 5. Build assistant message
@@ -322,6 +368,7 @@ async def query_core(
         if _stop_hook_attempts < MAX_STOP_HOOK_ATTEMPTS:
             stop_result = await run_stop_hooks(
                 session.get_messages(), stop_reason, hook_state,
+                configs=hook_state.hook_configs,
             )
             if stop_result.action == "block" or stop_result.additional_system_prompt:
                 # Stop hook wants the loop to continue
@@ -455,6 +502,7 @@ async def _check_permissions_and_call_tool(
     if hook_state is not None:
         pre_result = await run_pre_tool_use_hooks(
             tool_use.name, tool_use.input, tool_use.id, hook_state,
+            configs=hook_state.hook_configs,
         )
         if pre_result.action == "block":
             yield SessionEvent(
@@ -550,11 +598,17 @@ async def _check_permissions_and_call_tool(
             },
         )
 
+        # 3b. Emit SubAgent lifecycle events for Task tool (Fix 7)
+        if tool_use.name == "Task" and isinstance(result.data, dict):
+            for sub_event in _emit_subagent_events(tool_use.id, result.data):
+                yield sub_event
+
         # 4. PostToolUse hooks (Phase 5)
         if hook_state is not None:
             await run_post_tool_use_hooks(
                 tool_use.name, tool_use.input, result_text,
                 tool_use.id, is_error=False, hook_state=hook_state,
+                configs=hook_state.hook_configs,
             )
 
     except Exception as e:
@@ -574,6 +628,7 @@ async def _check_permissions_and_call_tool(
             await run_post_tool_use_hooks(
                 tool_use.name, tool_use.input, f"Tool error: {e}",
                 tool_use.id, is_error=True, hook_state=hook_state,
+                configs=hook_state.hook_configs,
             )
 
 
@@ -684,6 +739,7 @@ def _build_tool_context(
         safe_mode=options.safe_mode,
         abort_event=session.abort_event,
         options=tool_opts,
+        session=session,
     )
 
 
@@ -732,3 +788,57 @@ def _apply_permission_decision(
     tpc = session.permission_context.tool_permission_context
     if decision in (PermissionDecision.ALLOW_SESSION, PermissionDecision.ALLOW_ALWAYS):
         tpc.approved_tools = tpc.approved_tools | {tool_name}
+
+
+def _emit_subagent_events(
+    tool_use_id: str,
+    data: dict[str, Any],
+) -> list[SessionEvent]:
+    """Emit SubAgent lifecycle events from Task tool result data."""
+    events: list[SessionEvent] = []
+    agent_id = data.get("agent_id", "")
+    status = data.get("status", "")
+    description = data.get("description", "")
+
+    if status == "async_launched":
+        events.append(SessionEvent(
+            type=SessionEventType.SUB_AGENT_STARTED,
+            data={
+                "agent_id": agent_id,
+                "subagent_type": data.get("subagent_type", "general-purpose"),
+                "description": description,
+                "tool_use_id": tool_use_id,
+            },
+        ))
+    elif status == "completed":
+        content = data.get("content", [])
+        result_text = ""
+        if isinstance(content, list):
+            for block in content:
+                if isinstance(block, dict) and block.get("type") == "text":
+                    result_text = block.get("text", "")
+                    break
+        events.append(SessionEvent(
+            type=SessionEventType.SUB_AGENT_COMPLETED,
+            data={
+                "agent_id": agent_id,
+                "subagent_type": data.get("subagent_type", "general-purpose"),
+                "description": description,
+                "result_text": result_text,
+                "tool_use_count": data.get("total_tool_use_count", 0),
+                "duration_ms": data.get("total_duration_ms", 0),
+                "tool_use_id": tool_use_id,
+            },
+        ))
+    elif "error" in data:
+        events.append(SessionEvent(
+            type=SessionEventType.SUB_AGENT_FAILED,
+            data={
+                "agent_id": agent_id,
+                "subagent_type": data.get("subagent_type", "general-purpose"),
+                "description": description,
+                "error": data["error"],
+                "tool_use_id": tool_use_id,
+            },
+        ))
+    return events
