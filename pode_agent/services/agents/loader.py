@@ -17,41 +17,91 @@ from typing import Any
 import yaml
 
 from pode_agent.infra.logging import get_logger
-from pode_agent.types.agent import AgentConfig, AgentSource
+from pode_agent.types.agent import (
+    AgentConfig,
+    AgentLocation,
+    AgentModel,
+    AgentPermissionMode,
+    AgentSource,
+)
 
 logger = get_logger(__name__)
+
+# ---------------------------------------------------------------------------
+# camelCase → snake_case alias mapping for YAML frontmatter compatibility
+# ---------------------------------------------------------------------------
+
+_CAMELCASE_ALIASES: dict[str, str] = {
+    "agentType": "agent_type",
+    "whenToUse": "when_to_use",
+    "disallowedTools": "disallowed_tools",
+    "permissionMode": "permission_mode",
+    "forkContext": "fork_context",
+    "systemPrompt": "system_prompt",
+    "subagentType": "subagent_type",
+}
+
+
+def _normalize_aliases(data: dict[str, Any]) -> dict[str, Any]:
+    """Convert camelCase YAML keys to snake_case Python field names."""
+    normalized: dict[str, Any] = {}
+    for key, value in data.items():
+        python_key = _CAMELCASE_ALIASES.get(key, key)
+        normalized[python_key] = value
+    return normalized
+
 
 # ---------------------------------------------------------------------------
 # Built-in agent definitions
 # ---------------------------------------------------------------------------
 
-BUILTIN_AGENTS: dict[str, dict[str, Any]] = {
-    "general-purpose": {
-        "agent_type": "general-purpose",
-        "when_to_use": "General-purpose coding and research tasks",
-        "tools": ["*"],
-        "disallowed_tools": [],
-        "system_prompt": None,
-        "source": AgentSource.BUILTIN,
-    },
-    "Explore": {
-        "agent_type": "Explore",
-        "when_to_use": "Fast codebase exploration and search tasks",
-        "tools": ["*"],
-        "disallowed_tools": [],
-        "system_prompt": "You are a fast codebase explorer. Focus on finding and understanding code quickly.",
-        "source": AgentSource.BUILTIN,
-        "model": "haiku",
-    },
-    "Plan": {
-        "agent_type": "Plan",
-        "when_to_use": "Planning and architecture decisions",
-        "tools": ["*"],
-        "disallowed_tools": [],
-        "system_prompt": "You are a planning specialist. Analyze requirements and create step-by-step implementation plans.",
-        "source": AgentSource.BUILTIN,
-    },
-}
+BUILTIN_AGENTS: list[AgentConfig] = [
+    AgentConfig(
+        agent_type="general-purpose",
+        when_to_use="General-purpose coding and research tasks",
+        tools="*",
+        disallowed_tools=[],
+        system_prompt=(
+            "You are a general-purpose agent. You can use all available tools "
+            "to accomplish tasks. Be thorough and methodical."
+        ),
+        source=AgentSource.BUILTIN,
+        location=AgentLocation.LOCAL,
+        model=AgentModel.INHERIT,
+        permission_mode=AgentPermissionMode.DONT_ASK,
+        fork_context=False,
+    ),
+    AgentConfig(
+        agent_type="Explore",
+        when_to_use="Fast codebase exploration and search tasks",
+        tools="*",
+        disallowed_tools=["Task", "FileEditTool", "FileWriteTool", "BashTool"],
+        system_prompt=(
+            "You are a code search expert. Use Glob, Grep and FileRead "
+            "to quickly find files and code. Only research — never modify files."
+        ),
+        source=AgentSource.BUILTIN,
+        location=AgentLocation.LOCAL,
+        model=AgentModel.HAIKU,
+        permission_mode=AgentPermissionMode.DONT_ASK,
+        fork_context=False,
+    ),
+    AgentConfig(
+        agent_type="Plan",
+        when_to_use="Architecture planning and design analysis",
+        tools="*",
+        disallowed_tools=["Task", "FileEditTool", "FileWriteTool", "BashTool"],
+        system_prompt=(
+            "You are an architecture planning specialist. Analyze code "
+            "structure and create step-by-step implementation plans."
+        ),
+        source=AgentSource.BUILTIN,
+        location=AgentLocation.LOCAL,
+        model=AgentModel.INHERIT,
+        permission_mode=AgentPermissionMode.DONT_ASK,
+        fork_context=False,
+    ),
+]
 
 
 # ---------------------------------------------------------------------------
@@ -82,15 +132,22 @@ def parse_agent_markdown(content: str, file_path: Path) -> AgentConfig | None:
     body = match.group(2).strip()
 
     try:
-        data = yaml.safe_load(yaml_text)
-        if not isinstance(data, dict):
+        raw_data = yaml.safe_load(yaml_text)
+        if not isinstance(raw_data, dict):
             return None
+
+        # Normalize camelCase aliases
+        data = _normalize_aliases(raw_data)
 
         # Body becomes system_prompt if not explicitly set
         if "system_prompt" not in data and body:
             data["system_prompt"] = body
 
         data["source"] = data.get("source", AgentSource.PROJECT)
+        data["location"] = data.get("location", AgentLocation.LOCAL)
+        data.setdefault("base_dir", str(file_path.parent))
+        data.setdefault("filename", file_path.name)
+
         return AgentConfig(**data)
 
     except Exception:
@@ -115,8 +172,8 @@ async def load_agents(
     agents: dict[str, AgentConfig] = {}
 
     # 1. Built-in agents
-    for name, data in BUILTIN_AGENTS.items():
-        agents[name] = AgentConfig(**data)
+    for config in BUILTIN_AGENTS:
+        agents[config.agent_type] = config
 
     # 2. Plugin agents
     if plugin_dirs:
@@ -124,32 +181,34 @@ async def load_agents(
             agents_dir = plugin_dir / "agents"
             if agents_dir.exists():
                 for md_file in sorted(agents_dir.glob("*.md")):
-                    config = parse_agent_markdown(
+                    parsed = parse_agent_markdown(
                         md_file.read_text(encoding="utf-8"), md_file,
                     )
-                    if config:
-                        agents[config.agent_type] = config
+                    if parsed is not None:
+                        agents[parsed.agent_type] = parsed
 
-    # 3. User agents
+    # 3. User agents (~/.pode/agents/)
     user_agents_dir = Path.home() / ".pode" / "agents"
     if user_agents_dir.exists():
         for md_file in sorted(user_agents_dir.glob("*.md")):
-            config = parse_agent_markdown(
+            parsed = parse_agent_markdown(
                 md_file.read_text(encoding="utf-8"), md_file,
             )
-            if config:
-                agents[config.agent_type] = config
+            if parsed is not None:
+                parsed.source = AgentSource.USER
+                agents[parsed.agent_type] = parsed
 
-    # 4. Project agents
+    # 4. Project agents (.pode/agents/)
     if project_dir:
         proj_agents_dir = project_dir / ".pode" / "agents"
         if proj_agents_dir.exists():
             for md_file in sorted(proj_agents_dir.glob("*.md")):
-                config = parse_agent_markdown(
+                parsed = parse_agent_markdown(
                     md_file.read_text(encoding="utf-8"), md_file,
                 )
-                if config:
-                    agents[config.agent_type] = config
+                if parsed is not None:
+                    parsed.source = AgentSource.PROJECT
+                    agents[parsed.agent_type] = parsed
 
     return agents
 

@@ -91,12 +91,12 @@ class TestLoadAgents:
 class TestMergeAgents:
     def test_override(self) -> None:
         base = {
-            "a": AgentConfig(agent_type="a"),
-            "b": AgentConfig(agent_type="b"),
+            "a": AgentConfig(agent_type="a", when_to_use="agent a"),
+            "b": AgentConfig(agent_type="b", when_to_use="agent b"),
         }
         override = {
             "b": AgentConfig(agent_type="b", when_to_use="overridden"),
-            "c": AgentConfig(agent_type="c"),
+            "c": AgentConfig(agent_type="c", when_to_use="agent c"),
         }
         merged = merge_agents(base, override)
         assert merged["b"].when_to_use == "overridden"

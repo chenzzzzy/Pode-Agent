@@ -5,9 +5,9 @@ Reference: docs/subagent-system.md
 
 from __future__ import annotations
 
-from datetime import datetime
+import time
 from enum import StrEnum
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -23,6 +23,13 @@ class AgentSource(StrEnum):
     POLICY = "policy"
 
 
+class AgentLocation(StrEnum):
+    """Agent location classification."""
+
+    LOCAL = "local"
+    REMOTE = "remote"
+
+
 class AgentModel(StrEnum):
     """Model selection strategy for a sub-agent."""
 
@@ -33,11 +40,14 @@ class AgentModel(StrEnum):
 
 
 class AgentPermissionMode(StrEnum):
-    """Permission behaviour for a sub-agent."""
+    """Permission behaviour for a sub-agent.
+
+    Values use camelCase for Kode-Agent config file compatibility.
+    """
 
     DEFAULT = "default"
-    DONT_ASK = "dont_ask"
-    BYPASS_PERMISSIONS = "bypass_permissions"
+    DONT_ASK = "dontAsk"
+    BYPASS_PERMISSIONS = "bypassPermissions"
 
 
 class AgentConfig(BaseModel):
@@ -47,30 +57,29 @@ class AgentConfig(BaseModel):
     definitions.  Merged across sources with priority ordering.
     """
 
-    agent_type: str
-    when_to_use: str | None = None
-    tools: list[str] = Field(default_factory=lambda: ["*"])
-    disallowed_tools: list[str] = Field(default_factory=list)
-    system_prompt: str | None = None
+    agent_type: str = Field(description="Agent type name, e.g. 'general-purpose', 'Explore'")
+    when_to_use: str = Field(description="Description of when to use this agent")
+    tools: list[str] | Literal["*"] = Field(
+        default="*",
+        description="Available tools list, '*' means all",
+    )
+    disallowed_tools: list[str] = Field(
+        default_factory=list,
+        description="Disallowed tools (excluded even when tools='*')",
+    )
+    skills: list[str] = Field(default_factory=list, description="Associated skills")
+    system_prompt: str = Field(default="", description="Agent role system prompt")
     source: AgentSource = AgentSource.BUILTIN
-    model: AgentModel = AgentModel.INHERIT
-    permission_mode: AgentPermissionMode = AgentPermissionMode.DEFAULT
-    fork_context: bool = False
-    skills: list[str] | None = None
+    location: AgentLocation = AgentLocation.LOCAL
+    base_dir: str | None = None
+    filename: str | None = None
     color: str | None = None
-
-
-class SubAgentResult(BaseModel):
-    """Result returned by a completed sub-agent run."""
-
-    status: Literal["success", "error", "async_launched"]
-    agent_id: str
-    description: str
-    prompt: str
-    content: str | None = None
-    total_tool_use_count: int = 0
-    total_duration_ms: int = 0
-    total_tokens: int = 0
+    model: AgentModel = AgentModel.INHERIT
+    permission_mode: AgentPermissionMode = AgentPermissionMode.DONT_ASK
+    fork_context: bool = Field(
+        default=False,
+        description="Whether to inherit parent agent context",
+    )
 
 
 class BackgroundAgentStatus(StrEnum):
@@ -85,16 +94,31 @@ class BackgroundAgentStatus(StrEnum):
 class BackgroundAgentTask(BaseModel):
     """Tracks a background agent task."""
 
+    type: Literal["async_agent"] = "async_agent"
     agent_id: str
     description: str
     prompt: str
     subagent_type: str = "general-purpose"
     status: BackgroundAgentStatus = BackgroundAgentStatus.RUNNING
-    result_text: str | None = None
+    started_at: float = Field(default_factory=time.time)
+    completed_at: float | None = None
     error: str | None = None
-    started_at: datetime = Field(default_factory=datetime.now)
-    completed_at: datetime | None = None
+    result_text: str | None = None
+    messages: list[dict[str, Any]] = Field(default_factory=list)
     total_tool_use_count: int = 0
     total_duration_ms: int = 0
     total_tokens: int = 0
     result_retrieved: bool = False
+
+
+class SubAgentResult(BaseModel):
+    """Result returned by a completed sub-agent run."""
+
+    status: Literal["completed", "async_launched"]
+    agent_id: str
+    description: str
+    prompt: str
+    content: list[dict[str, Any]] | None = None
+    total_tool_use_count: int = 0
+    total_duration_ms: int = 0
+    total_tokens: int = 0
