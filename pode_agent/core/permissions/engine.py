@@ -80,12 +80,16 @@ class PermissionEngine:
                 return PermissionResult.ALLOWED
             return PermissionResult.DENIED
 
-        # 7. Tool-specific rules.
+        # 7. Accept-edits mode — allow all tools (including writes).
+        if context.mode.value == "accept_edits":
+            return PermissionResult.ALLOWED
+
+        # 8. Tool-specific rules.
         tool_result = self._check_tool_specific(tool_name, tool_input)
         if tool_result is not None:
             return tool_result
 
-        # 8. Default.
+        # 9. Default.
         return PermissionResult.NEEDS_PROMPT
 
     def _check_tool_specific(

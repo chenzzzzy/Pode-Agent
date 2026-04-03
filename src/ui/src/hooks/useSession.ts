@@ -140,7 +140,11 @@ export function useSession(peer: JsonRpcPeer) {
         toolUseId: p.tool_use_id,
         toolName: activeTool?.toolName ?? "unknown",
         resultStatus: p.is_error ? "error" : "success",
-        output: typeof p.data === "string" ? p.data : JSON.stringify(p.data),
+        output: typeof p.data === "string"
+        ? p.data
+        : p.data != null
+          ? JSON.stringify(p.data)
+          : undefined,
         timestamp: Date.now(),
       }
 

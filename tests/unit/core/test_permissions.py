@@ -347,6 +347,29 @@ class TestPermissionEngine:
         result = self.engine.has_permissions("web_fetch", context=ctx)
         assert result is PermissionResult.NEEDS_PROMPT
 
+    # Step 7: accept_edits mode allows all tools (used by SubAgents)
+    def test_accept_edits_allows_write_tool(self) -> None:
+        ctx = PermissionContext(mode=PermissionMode.ACCEPT_EDITS)
+        result = self.engine.has_permissions("file_write", context=ctx)
+        assert result is PermissionResult.ALLOWED
+
+    def test_accept_edits_allows_bash(self) -> None:
+        ctx = PermissionContext(mode=PermissionMode.ACCEPT_EDITS)
+        result = self.engine.has_permissions(
+            "bash", {"command": "npm install"}, context=ctx,
+        )
+        assert result is PermissionResult.ALLOWED
+
+    def test_accept_edits_still_respects_rejected(self) -> None:
+        """Rejected tools should still be denied even in accept_edits mode."""
+        tpc = ToolPermissionContext(rejected_tools={"bash"})
+        ctx = PermissionContext(
+            mode=PermissionMode.ACCEPT_EDITS,
+            tool_permission_context=tpc,
+        )
+        result = self.engine.has_permissions("bash", context=ctx)
+        assert result is PermissionResult.DENIED
+
     # Check order: bypass overrides rejected
     def test_bypass_overrides_rejected(self) -> None:
         tpc = ToolPermissionContext(rejected_tools={"bash"})

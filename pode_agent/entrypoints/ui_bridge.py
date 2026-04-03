@@ -110,7 +110,7 @@ _EVENT_MAP: dict[
         "session/tool_result",
         lambda e: {
             "tool_use_id": e.data.get("tool_use_id", "") if e.data else "",
-            "data": e.data.get("data") if e.data else None,
+            "data": e.data.get("result") if e.data else None,
             "is_error": e.data.get("is_error", False) if e.data else False,
         },
     ),
