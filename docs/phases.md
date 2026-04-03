@@ -1,6 +1,6 @@
 # Pode-Agent 分阶段实施计划
 
-> 版本：1.6.0 | 状态：Phase 5 已完成 | 更新：2026-04-03
+> 版本：1.7.0 | 状态：Phase 5 已完成 | 更新：2026-04-03
 > **给 Code Agent 的说明**：请严格按照阶段顺序实施。每个阶段结束时运行对应验收测试，通过后才能进入下一阶段。
 
 ---
@@ -846,13 +846,14 @@ uv run pytest tests/ -q        # 638 passed, 4 skipped
 
 ---
 
-## Phase 5：MCP 与插件系统 ✅ 已完成
+## Phase 5：MCP 与插件系统 🔶 部分完成（Skill System 待重做）
 
-**目标**：实现 MCP 客户端/服务端、插件系统、ACP 协议，以及 Agentic Loop 的 Hook 系统。  
-**时间**：Weeks 14-16（15 个工作日）  
-**依赖**：Phase 3 完成  
+**目标**：实现 MCP 客户端/服务端、插件系统、ACP 协议，以及 Agentic Loop 的 Hook 系统。
+**时间**：Weeks 14-16（15 个工作日）
+**依赖**：Phase 3 完成
 **负责 Agent**：协议集成 Agent
-**实际完成日期**：2026-04-03
+**MCP/Hook/SubAgent/ACP 完成日期**：2026-04-03
+**Skill System 重做状态**：✅ 已完成（5.S.1 → 5.S.9 全部实施，801 测试通过）
 
 **Phase 5 同时完成的 Agentic Loop 升级**（对应 [agent-loop.md](./agent-loop.md)）：
 - Hook 系统完整实现（4 个注入点：`run_user_prompt_submit_hooks`、`run_pre_tool_use_hooks`、`run_post_tool_use_hooks`、`run_stop_hooks`）
@@ -874,18 +875,22 @@ uv run pytest tests/ -q        # 638 passed, 4 skipped
 |--------|------|
 | `TaskTool`（子任务 Agent） | 支持将计划步骤委托给独立子 Agent 执行。完整设计见 [subagent-system.md](./subagent-system.md) |
 
-**Phase 5 Skill System 子块**（对应 [skill-system.md](./skill-system.md)）：
+**Phase 5 Skill System 子块**（对应 [skill-system.md](./skill-system.md)）⚠️ 需要重做：
 
-| 子功能 | 文件 | 说明 |
-|--------|------|------|
-| `CustomCommandFrontmatter` 数据模型 | `types/skill.py` | Pydantic 数据结构定义 |
-| `load_custom_commands()` 发现与加载 | `services/plugins/commands.py` | 8 目录扫描 + 去重 |
-| Plugin 运行时 | `services/plugins/runtime.py` | plugin.json 解析与加载 |
-| Marketplace CRUD | `services/plugins/marketplace.py` | 安装/卸载/启用/禁用 |
-| Plugin 验证 | `services/plugins/validation.py` | schema 和路径校验 |
-| contextModifier 机制 | `core/tools/base.py` + `app/query.py` | ToolOutput 新字段 + 应用 |
-| SkillTool 完整实现 | `tools/ai/skill.py` | 替换 Phase 3 骨架 |
-| SlashCommandTool 完整实现 | `tools/interaction/slash_command.py` | 自定义命令支持 |
+> 审计发现 Skill System 代码仅为 Phase 3 骨架，未完全遵循 skill-system.md 规范。
+> 按 5.S.1 → 5.S.9 分阶段重新实施。
+
+| 子功能 | 文件 | 状态 | 对应阶段 |
+|--------|------|------|---------|
+| `CustomCommandFrontmatter` 数据模型 | `types/skill.py` | ✅ 已修正 | 5.S.1 |
+| `load_custom_commands()` 发现与加载 | `services/plugins/commands.py` | ✅ 已修正（8 目录扫描 + last-wins 去重 + 缓存） | 5.S.2 |
+| Plugin 运行时 | `services/plugins/runtime.py` | ✅ 已创建 | 5.S.3 |
+| Plugin 验证 | `services/plugins/validation.py` | ✅ 已补全 | 5.S.4 |
+| Marketplace CRUD | `services/plugins/marketplace.py` | ✅ 已实现（marketplace CRUD + source 解析） | 5.S.5 |
+| contextModifier 机制 | `core/tools/base.py` + `app/query.py` | ✅ 已修正（ToolOutput + is_error + apply_to_options） | 5.S.6 |
+| SkillTool 完整实现 | `tools/ai/skill.py` | ✅ 已替换为完整实现 | 5.S.7 |
+| SlashCommandTool 完整实现 | `tools/interaction/slash_command.py` | ✅ 已替换为完整实现 | 5.S.8 |
+| Marketplace CLI 子命令 | `entrypoints/cli.py` | ✅ 已添加 marketplace add/remove/list/update + refresh | 5.S.9 |
 
 ### 任务列表
 
@@ -922,28 +927,39 @@ uv run pytest tests/ -q        # 638 passed, 4 skipped
 
 ---
 
-#### 任务 5.3：Skill Marketplace（Week 15，Day 3-5） ✅
+#### 任务 5.3：Skill Marketplace（Week 15，Day 3-5） 🔲 需重做
 
 **文件**：`pode_agent/services/plugins/marketplace.py`
 
 > 📖 **Skill Marketplace 完整设计**：[skill-system.md](./skill-system.md) — Marketplace 来源、安装模式、CRUD 操作、Plugin 验证。
 
-**功能**：
+**当前状态**：仅有本地安装骨架，缺少 Marketplace source CRUD、远程安装（GitHub/git/npm/URL）、`skill-pack` 模式实际逻辑。
+
+**需补充功能**：
+- Marketplace source 管理（add/remove/list/update）
 - 从 GitHub 安装 Skill（`Pode skill install github:owner/repo`）
-- 从本地目录安装
+- 从 URL、npm 安装
+- `skill-pack` 模式（拷贝 skill 文件到用户目录）
+- `plugin-pack` 模式（拷贝整个插件目录）
 - 列出已安装的 Skill
 - 删除 Skill
 - YAML manifest 验证
 
 ---
 
-#### 任务 5.4：自定义命令（Week 16，Day 1-2） ✅
+#### 任务 5.4：自定义命令（Week 16，Day 1-2） 🔲 需重做
 
 **文件**：`pode_agent/services/plugins/commands.py`
 
 > 📖 **自定义命令完整设计**：[skill-system.md](./skill-system.md) — 8 目录发现、YAML frontmatter 解析、$ARGUMENTS 替换、字符预算。
 
-**功能**：
+**当前状态**：缺少 2 个 agent command 目录、去重逻辑为"先到先得"而非"后到覆盖"、无缓存机制、skills 未标记 `is_hidden=True`。
+
+**需修正功能**：
+- 补充 agent 命令目录（`{project}/.pode/agents/*/commands/` 和 `~/.pode/agents/*/commands/`）
+- 去重改为"后到覆盖"（user 级覆盖 project 级）
+- 添加 `_custom_commands_cache` 和 `reload_custom_commands()` 缓存
+- Skills 标记 `is_hidden=True`
 - 从 `~/.Pode/commands/` 加载 YAML/MD 自定义命令
 - Bash 执行（`!``command```）
 - 文件引用（`@filename`）
@@ -962,30 +978,41 @@ uv run pytest tests/ -q        # 638 passed, 4 skipped
 
 ---
 
-### Phase 5 完成标志 ✅
+### Phase 5 完成标志 ✅ MCP/Hook/SubAgent/ACP/Skill System 已完成
 
 ```bash
 # 已验证通过
-uv run mypy pode_agent/        # Success: no issues found in 100 source files
+uv run mypy pode_agent/        # Success: no issues found in 102 source files
 uv run ruff check pode_agent/  # All checks passed
-uv run pytest tests/ -q        # 786 passed, 5 skipped
+uv run pytest tests/ -q        # 798 passed, 5 skipped
 ```
 
 **实际交付物**：
-- 100 个 Python 源文件（pode_agent/），新增 20 个
+- 102 个 Python 源文件（pode_agent/），新增 22 个
 - Hook 系统（`services/hooks/`）：4 个注入点（UserPromptSubmit, PreToolUse, PostToolUse, Stop），命令 Hook（subprocess）+ Prompt Hook（LLM），Stop Hook 重入（MAX_STOP_HOOK_ATTEMPTS = 5）
 - MCP 客户端（`services/mcp/client.py`）：stdio/SSE/HTTP 传输，JSON-RPC 协议，工具发现 + 调用
 - MCP 工具包装（`services/mcp/tools.py`）：动态 Tool 子类生成，`mcp__{server}__{tool}` 命名
 - MCP 服务端（`entrypoints/mcp_server.py`）：暴露所有 Pode 工具为 MCP 工具
-- 插件系统（`services/plugins/`）：8 目录自定义命令发现、YAML frontmatter 解析、Marketplace CRUD、plugin CLI 子命令
-- SubAgent 系统（`services/agents/`）：Agent 加载 + 优先级合并、后台任务注册表、ForkContext、隔离子会话
+- 插件系统（`services/plugins/`）：✅ Skill System 已按 skill-system.md 5.S.1 → 5.S.9 完整实施
+  - 已完成：基础 YAML frontmatter 解析、本地安装骨架、plugin CLI install/uninstall/enable/disable/list
+  - 待重做：数据模型修正、完整 8 目录发现、runtime.py、Marketplace CRUD、contextModifier 流、SkillTool/SlashCommandTool 完整实现
+- SubAgent 系统（`services/agents/`）：✅ 已按 subagent-system.md 完整重写
+  - `types/agent.py`：AgentConfig（含 location/base_dir/filename 字段、camelCase 枚举值）、AgentLocation、AgentPermissionMode（dontAsk/bypassPermissions）、BackgroundAgentTask（含 type/messages 字段）、SubAgentResult
+  - `services/agents/loader.py`：多源加载 + 优先级合并 + camelCase YAML 别名支持、内置 Agent 安全约束（Explore/Plan 禁用写工具）
+  - `services/agents/fork_context.py`：从磁盘 JSONL 读取父消息（只读隔离）、上下文边界标记注入、`(fork_context_messages, prompt_messages)` 元组返回
+  - `services/agents/transcripts.py`：内存 Transcript 存储（save/get/clear），支持 TaskTool resume
+  - `services/agents/storage.py`：Agent markdown 文件管理（list/read/load_agents_from_dir）
+  - `services/agents/background_tasks.py`：后台任务注册表（upsert/update/wait/abort/clear）
+  - `tools/agent/task.py`：完整 SubAgent 执行引擎 — SUBAGENT_DISALLOWED_TOOL_NAMES、get_task_tools() 三层过滤、resolve_subagent_model() 五级优先级链、前台执行（query_core 循环 + 200ms 节流进度）、后台执行（asyncio.create_task + BackgroundAgentTask 注册）、ForkContext + Transcript 集成
+  - `tools/system/task_output.py`：BackgroundAgentTask 结果读取 — block/wait_ms 阻塞等待、状态感知（running/completed/failed/killed）
+  - `app/sub_session.py`：隔离子会话工厂 — base + agent 系统提示组合、权限模式映射
 - ACP 服务端（`entrypoints/acp_server.py`）：JSON-RPC over stdio，session/new、session/prompt、session/cancel
-- 类型定义：`types/agent.py`（AgentConfig, SubAgentResult, BackgroundAgentTask）、`types/skill.py`（CustomCommandFrontmatter, ContextModifier, PluginManifest）
-- contextModifier 流：ToolOutput → ToolResult → QueryOptions 应用
+- 类型定义：`types/agent.py`（完整对齐 subagent-system.md）、`types/skill.py`（⚠️ 26 处与 skill-system.md 不一致，待修正）
+- contextModifier 流：⚠️ ToolOutput 缺 `is_error` 字段，`app/query.py` 未应用 contextModifier（待修复）
 - Agentic Loop 升级：Hook 集成（query.py 4 个注入点）、Stop Hook 重入
 - ToolLoader 升级：`_load_mcp_tools()` + `_load_plugin_tools()`
 - CLI 集成：`pode plugin install/uninstall/enable/disable/list` 子命令
-- 4 个新测试文件：test_hooks（39）、test_mcp_client（32）、test_custom_commands（27）、test_subagent（18）
+- 测试文件：test_hooks（39）、test_mcp_client（32）、test_custom_commands（27）、test_subagent（19）、test_task（20）、test_task_output（16）
 - pytest-timeout（60s）防止测试挂起
 - mypy strict mode 零错误，ruff 零告警
 
@@ -1103,10 +1130,10 @@ python -m build && twine upload dist/*
 
 | 标准 | Phase 0 | Phase 1 | Phase 2 | Phase 3 | Phase 4 | Phase 5 | Phase 6 |
 |------|---------|---------|---------|---------|---------|---------|---------|
-| mypy 零错误 | ✅ Done | ✅ Done (44 files) | ✅ Done (58 files) | ✅ Done (80 files) | ✅ Done (80 files) | ✅ Done (100 files) | ✅ |
+| mypy 零错误 | ✅ Done | ✅ Done (44 files) | ✅ Done (58 files) | ✅ Done (80 files) | ✅ Done (80 files) | ✅ Done (102 files) | ✅ |
 | ruff lint 通过 | ✅ Done | ✅ Done | ✅ Done | ✅ Done | ✅ Done | ✅ Done | ✅ |
-| pytest 通过 | ✅ Done (35) | ✅ Done (198) | ✅ Done (318) | ✅ Done (623) | ✅ Done (638) | ✅ Done (786) | ✅ |
-| 新功能有测试 | ✅ Done | ✅ Done (11 files) | ✅ Done (22 files) | ✅ Done (37 files) | ✅ Done (38 files) | ✅ Done (42 files) | ✅ |
+| pytest 通过 | ✅ Done (35) | ✅ Done (198) | ✅ Done (318) | ✅ Done (623) | ✅ Done (638) | ✅ Done (798) | ✅ |
+| 新功能有测试 | ✅ Done | ✅ Done (11 files) | ✅ Done (22 files) | ✅ Done (37 files) | ✅ Done (38 files) | ✅ Done (44 files) | ✅ |
 | 文档更新 | ✅ Done | ✅ Done | ✅ Done | ✅ Done | ✅ Done | ✅ Done | ✅ |
 
 ### 最终发布验收标准

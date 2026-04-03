@@ -19,7 +19,7 @@
 
 ## 项目愿景
 
-**Pode-Agent** 是 Kode-Agent 的 Python 重写版本，目标是（Phase 0-5 已完成，786 测试通过）：
+**Pode-Agent** 是 Kode-Agent 的 Python 重写版本，目标是（Phase 0-5 已完成，798 测试通过）：
 
 - **开发者友好**：使用纯 Python 生态，降低贡献门槛（不需要 Bun/Node 环境）
 - **生产就绪**：完整保留原版所有功能，行为 1:1 对齐
@@ -46,7 +46,7 @@
 - [x] 实现所有 24+ 个 Tool
 - [x] 实现上下文管理（项目感知）
 - [x] 实现 Hook 系统（4 个注入点 + Stop Hook 重入）
-- [x] 实现 SubAgent 系统（TaskTool、Agent 配置、ForkContext）
+- [x] 实现 SubAgent 系统（TaskTool 执行引擎、Agent 配置加载、ForkContext 磁盘隔离、前后台执行、Transcript 恢复）
 - [x] 实现 ACP 协议（JSON-RPC over stdio）
 
 ### 长期目标（Phase 6，6 个月以上）
@@ -69,6 +69,7 @@
 | **上下文感知** | 自动读取 README、git 状态、项目结构 |
 | **终端 UI** | React + Ink v5 终端界面（1:1 深度复刻 Kode-Agent），支持语法高亮 |
 | **计划模式** | 先规划后执行，减少意外操作 |
+| **SubAgent 系统** | 独立子代理执行（前台/后台）、三层工具过滤、磁盘上下文隔离、Transcript 恢复 |
 
 ---
 
@@ -165,7 +166,7 @@ Phase 5 (Weeks 17-20): 高级功能 ✅ 已完成
   ├─ MCP 客户端/服务端
   ├─ 插件系统 + Skill Marketplace
   ├─ Hook 系统（4 个注入点）
-  ├─ SubAgent 系统（TaskTool、Agent 加载、ForkContext）
+  ├─ SubAgent 系统（TaskTool 执行引擎、Agent 加载、ForkContext 磁盘隔离、前后台执行、Transcript 存储）
   └─ ACP 协议
 
 Phase 6 (Weeks 21-24): 完善与发布
