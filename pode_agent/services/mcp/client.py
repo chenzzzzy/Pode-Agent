@@ -188,6 +188,11 @@ class McpClient:
         """Close the connection to the MCP server."""
         if self._process is not None:
             try:
+                # Close all pipe transports to prevent __del__ errors on Windows
+                for pipe in (self._process.stdin, self._process.stdout, self._process.stderr):
+                    if pipe is not None:
+                        with contextlib.suppress(Exception):
+                            pipe.close()
                 self._process.terminate()
                 await asyncio.wait_for(self._process.wait(), timeout=5.0)
             except Exception:
@@ -208,7 +213,7 @@ class McpClient:
         })
 
     async def _send_request(self, method: str, params: dict[str, Any]) -> dict[str, Any]:
-        """Send a JSON-RPC request and return the response."""
+        """Send a JSON-RPC request and return the unwrapped result."""
         self._request_id += 1
         request = {
             "jsonrpc": "2.0",
@@ -218,7 +223,14 @@ class McpClient:
         }
 
         if self._process is not None:
-            return await self._stdio_request(request)
+            raw = await self._stdio_request(request)
+            # JSON-RPC 2.0: error responses
+            if "error" in raw:
+                err = raw["error"]
+                raise RuntimeError(f"MCP JSON-RPC error: {err}")
+            # Unwrap "result" envelope if present (standard JSON-RPC 2.0)
+            result = raw.get("result", raw)
+            return result if isinstance(result, dict) else raw
         # SSE/HTTP: placeholder
         return {}
 

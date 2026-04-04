@@ -146,6 +146,12 @@ def main(
         )
         raise typer.Exit(code=1)
 
+    # Suppress Windows ProactorBasePipeTransport __del__ warnings that fire
+    # during GC after the event loop is already closed (pipe handles invalid).
+    import warnings
+
+    warnings.filterwarnings("ignore", category=ResourceWarning)
+
     exit_code = asyncio.run(_launch_repl(model=model, safe_mode=safe_mode))
     raise typer.Exit(code=exit_code)
 
@@ -264,13 +270,11 @@ async def _launch_repl(*, model: str = DEFAULT_MODEL_NAME, safe_mode: bool = Fal
     except KeyboardInterrupt:
         pass
     finally:
-        # Suppress Windows ProactorBasePipeTransport cleanup warnings
-        import warnings
-        warnings.filterwarnings("ignore", category=ResourceWarning)
-
         with contextlib.suppress(Exception):
             writer.close()
             await writer.wait_closed()
+        with contextlib.suppress(Exception):
+            transport.close()
         with contextlib.suppress(Exception):
             server.close()
         if proc.returncode is None:
@@ -279,6 +283,17 @@ async def _launch_repl(*, model: str = DEFAULT_MODEL_NAME, safe_mode: bool = Fal
                 await asyncio.wait_for(proc.wait(), timeout=5.0)
             except TimeoutError:
                 proc.kill()
+
+        # Close subprocess pipe transports explicitly so __del__ doesn't fire
+        # after the event loop is gone (Windows ProactorBasePipeTransport issue).
+        with contextlib.suppress(Exception):
+            if hasattr(proc, "_transport") and proc._transport is not None:
+                proc._transport.close()
+
+        # Force GC while the event loop is still alive to avoid __del__ errors
+        import gc
+
+        gc.collect()
 
     return proc.returncode or 0
 

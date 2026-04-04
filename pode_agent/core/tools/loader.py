@@ -9,7 +9,7 @@ Reference: docs/tools-system.md — ToolLoader
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from pode_agent.core.config.schema import GlobalConfig
@@ -34,6 +34,7 @@ class ToolLoader:
     def __init__(self, registry: ToolRegistry, config: GlobalConfig | None = None) -> None:
         self._registry = registry
         self._config = config
+        self._mcp_clients: list[Any] = []
 
     async def load_all(self) -> None:
         """Load all tool sources in order: builtin → MCP → plugin."""
@@ -51,11 +52,29 @@ class ToolLoader:
         logger.debug("Loaded %d built-in tools", len(tools))
 
     async def _load_mcp_tools(self) -> None:
-        """Connect to configured MCP servers and register their tools."""
-        if not self._config:
-            return
+        """Connect to configured MCP servers and register their tools.
 
-        mcp_servers = getattr(self._config, "mcp_servers", {})
+        Merges MCP server definitions from both global config and project config.
+        Project config overrides global config for same-named servers.
+        """
+        # Merge MCP servers from global config + project config
+        from pode_agent.core.config.schema import McpServerConfig
+
+        mcp_servers: dict[str, McpServerConfig] = {}
+        if self._config:
+            mcp_servers.update(getattr(self._config, "mcp_servers", {}))
+
+        # Also check project-level .pode.json
+        try:
+            from pode_agent.core.config.loader import get_current_project_config
+
+            project_config = get_current_project_config()
+            project_mcp = getattr(project_config, "mcp_servers", {})
+            if project_mcp:
+                mcp_servers.update(project_mcp)  # project overrides global
+        except Exception:
+            logger.debug("No project config found for MCP servers")
+
         if not mcp_servers:
             return
 
@@ -69,6 +88,7 @@ class ToolLoader:
                     "MCP server '%s' not connected: %s", wrapped.name, wrapped.error,
                 )
                 continue
+            self._mcp_clients.append(wrapped.client)
             try:
                 tools = await wrapped.client.list_tools()
                 for tool_def in tools:
@@ -103,6 +123,15 @@ class ToolLoader:
                     logger.exception("Failed to load plugin tool: %s", ep.name)
         except Exception:
             logger.debug("No plugin entry_points group found")
+
+    async def close_all(self) -> None:
+        """Close all MCP client connections (subprocess cleanup)."""
+        import contextlib
+
+        for client in self._mcp_clients:
+            with contextlib.suppress(Exception):
+                await client.close()
+        self._mcp_clients.clear()
 
 
 async def get_enabled_tools(

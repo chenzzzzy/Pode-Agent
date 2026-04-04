@@ -339,6 +339,7 @@ class UIBridge:
         self._write_stream = write_stream
         self._session: SessionManager | None = None
         self._server: JsonRpcServer | None = None
+        self._tool_loader: Any = None
 
     def _write_line(self, line: str) -> None:
         """Write a JSON-RPC line to the connected stream."""
@@ -413,6 +414,10 @@ class UIBridge:
         except asyncio.CancelledError:
             pass
         finally:
+            # Close MCP subprocess connections before event loop exits
+            if self._tool_loader is not None:
+                with contextlib.suppress(Exception):
+                    await self._tool_loader.close_all()
             # Cancel any still-running dispatch tasks
             for t in pending_tasks:
                 t.cancel()
@@ -477,6 +482,7 @@ class UIBridge:
             registry = ToolRegistry()
             loader = ToolLoader(registry, config=config)
             await loader.load_all()
+            self._tool_loader = loader
             tools = registry.tools
 
             self._session = SessionManager(
