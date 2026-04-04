@@ -129,6 +129,13 @@ _EVENT_MAP: dict[
         lambda e: {
             "cost_usd": e.data.get("cost_usd", 0.0) if e.data else 0.0,
             "total_usd": e.data.get("total_usd", 0.0) if e.data else 0.0,
+            "input_tokens": e.data.get("input_tokens", 0) if e.data else 0,
+            "output_tokens": e.data.get("output_tokens", 0) if e.data else 0,
+            "total_tokens": e.data.get("total_tokens", 0) if e.data else 0,
+            "cumulative_input_tokens": e.data.get("cumulative_input_tokens", 0) if e.data else 0,
+            "cumulative_output_tokens": e.data.get("cumulative_output_tokens", 0) if e.data else 0,
+            "cumulative_total_tokens": e.data.get("cumulative_total_tokens", 0) if e.data else 0,
+            "duration_ms": e.data.get("duration_ms", 0) if e.data else 0,
         },
     ),
     SessionEventType.MODEL_ERROR: (
@@ -446,16 +453,19 @@ class UIBridge:
             # Auto-detect model from env if the default model has no API key
             errors = validate_provider_config(model_name, config)
             if errors:
-                # Try to find a working model from environment variables
-                env_model = os.environ.get("DASHSCOPE_MODEL", "").strip()
-                if env_model:
-                    alt_errors = validate_provider_config(env_model, config)
-                    if not alt_errors:
-                        model_name = env_model
-                        errors = []
-                        logger.info(
-                            "Default model unavailable, using DASHSCOPE_MODEL=%s", env_model,
-                        )
+                # Try env-based model fallbacks: DASHSCOPE_MODEL, GLM_MODEL
+                for env_key in ("DASHSCOPE_MODEL", "GLM_MODEL"):
+                    env_model = os.environ.get(env_key, "").strip()
+                    if env_model:
+                        alt_errors = validate_provider_config(env_model, config)
+                        if not alt_errors:
+                            model_name = env_model
+                            errors = []
+                            logger.info(
+                                "Default model unavailable, using %s=%s",
+                                env_key, env_model,
+                            )
+                            break
 
             if errors:
                 raise JsonRpcError(

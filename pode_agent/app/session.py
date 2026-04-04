@@ -15,7 +15,6 @@ from typing import Any
 
 from pode_agent.app.query import QueryOptions, query
 from pode_agent.core.config.schema import DEFAULT_MODEL_NAME
-from pode_agent.core.cost_tracker import get_total_cost
 from pode_agent.core.permissions.types import (
     PermissionContext,
     PermissionDecision,
@@ -62,6 +61,8 @@ class SessionManager:
         self._abort_event = asyncio.Event()
         self._permission_context = permission_context or PermissionContext()
         self._cost_usd: float = 0.0
+        self._input_tokens: int = 0
+        self._output_tokens: int = 0
         self._model = model
         self._system_prompt = system_prompt
 
@@ -125,6 +126,19 @@ class SessionManager:
         """Add a cost amount to the session total."""
         self._cost_usd += cost_usd
 
+    def add_usage(self, input_tokens: int, output_tokens: int) -> None:
+        """Add token usage to the session totals."""
+        self._input_tokens += input_tokens
+        self._output_tokens += output_tokens
+
+    def get_usage_totals(self) -> dict[str, int]:
+        """Return cumulative token usage totals for this session."""
+        return {
+            "cumulative_input_tokens": self._input_tokens,
+            "cumulative_output_tokens": self._output_tokens,
+            "cumulative_total_tokens": self._input_tokens + self._output_tokens,
+        }
+
     def resolve_permission(self, decision: PermissionDecision) -> None:
         """Resolve a pending permission request.
 
@@ -167,12 +181,25 @@ class SessionManager:
         ):
             # Handle side effects
             if event.type == SessionEventType.COST_UPDATE and event.data:
-                cost = event.data.get("cost_usd", 0.0)
+                cost = float(event.data.get("cost_usd", 0.0))
+                input_tokens = int(event.data.get("input_tokens", 0))
+                output_tokens = int(event.data.get("output_tokens", 0))
+                duration_ms = int(event.data.get("duration_ms", 0))
                 self.add_cost(cost)
+                self.add_usage(input_tokens, output_tokens)
+                usage_totals = self.get_usage_totals()
                 # Update event with actual total
                 event = SessionEvent(
                     type=event.type,
-                    data={**event.data, "total_usd": get_total_cost()},
+                    data={
+                        **event.data,
+                        "total_usd": self.get_total_cost(),
+                        "input_tokens": input_tokens,
+                        "output_tokens": output_tokens,
+                        "total_tokens": int(event.data.get("total_tokens", input_tokens + output_tokens)),
+                        "duration_ms": duration_ms,
+                        **usage_totals,
+                    },
                     message_id=event.message_id,
                 )
 

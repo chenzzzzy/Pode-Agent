@@ -14,7 +14,7 @@ export type SessionNotification =
   | { method: "session/tool_progress"; params: { tool_use_id: string; content: string } }
   | { method: "session/tool_result"; params: ToolResultParams }
   | { method: "session/permission_request"; params: PermissionRequestParams }
-  | { method: "session/cost_update"; params: { cost_usd: number; total_usd: number } }
+  | { method: "session/cost_update"; params: CostUpdateParams }
   | { method: "session/model_error"; params: { error: string; is_retryable?: boolean } }
   | { method: "session/done"; params: Record<string, never> }
   | { method: "plan/created"; params: PlanCreatedParams }
@@ -51,6 +51,18 @@ export type PlanCreatedParams = {
   steps_count: number
   acceptance_criteria?: string[]
   risks?: string[]
+}
+
+export type CostUpdateParams = {
+  cost_usd: number
+  total_usd: number
+  input_tokens: number
+  output_tokens: number
+  total_tokens: number
+  cumulative_input_tokens: number
+  cumulative_output_tokens: number
+  cumulative_total_tokens: number
+  duration_ms: number
 }
 
 // --- Request methods (TypeScript → Python) ---

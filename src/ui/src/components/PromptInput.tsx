@@ -1,11 +1,11 @@
 /**
- * PromptInput — terminal input component with cursor editing.
+ * PromptInput — terminal input component with grapheme-aware cursor editing.
  *
- * Uses a combined { value, cursor } state with functional updates
- * to guarantee stale-closure safety on rapid key presses.
+ * Uses Intl.Segmenter for grapheme cluster segmentation (CJK/emoji safe),
+ * and string-width for accurate visible-width measurement in terminal.
  *
  * Key bindings:
- * - Arrow keys: left/right move cursor, up/down jump to start/end
+ * - Arrow keys: left/right move cursor, up/down navigate history
  * - Ctrl+a/e: start/end of line
  * - Ctrl+u/k: kill before/after cursor
  * - Ctrl+w: delete word before cursor
@@ -15,9 +15,10 @@
  * - Enter: submit
  */
 
-import React, { useCallback, useRef, useState, useEffect } from "react"
+import React, { useCallback, useRef, useState, useEffect, useMemo } from "react"
 import { Box, Text, useInput } from "ink"
 import figures from "figures"
+import stringWidth from "string-width"
 import type { Theme } from "../types.js"
 import { useArrowKeyHistory } from "../hooks/useArrowKeyHistory.js"
 
@@ -28,29 +29,48 @@ export interface PromptInputProps {
   onExit?: () => void
 }
 
-/** Combined state avoids stale closures between rapid key presses. */
+/**
+ * Split a string into an array of grapheme clusters.
+ * Uses Intl.Segmenter when available, falls back to Array.from().
+ */
+function toGraphemes(str: string): string[] {
+  if (typeof Intl !== "undefined" && Intl.Segmenter) {
+    const segmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" })
+    return Array.from(segmenter.segment(str), (s) => s.segment)
+  }
+  return Array.from(str)
+}
+
+/** Join grapheme array back to string. */
+function fromGraphemes(graphemes: string[]): string {
+  return graphemes.join("")
+}
+
+/** Combined state: grapheme array + cursor index (in grapheme units). */
 interface InputState {
-  value: string
-  cursor: number
+  graphemes: string[]
+  cursor: number // index in graphemes array
+}
+
+function stateToString(state: InputState): string {
+  return fromGraphemes(state.graphemes)
 }
 
 /** Max command history entries kept in memory. */
 const MAX_HISTORY = 1000
 
 export function PromptInput({ theme, isLoading, onSubmit, onExit }: PromptInputProps) {
-  const [input, setInput] = useState<InputState>({ value: "", cursor: 0 })
+  const [input, setInput] = useState<InputState>({ graphemes: [], cursor: 0 })
   const historyRef = useRef<string[]>([])
-  // pendingSubmit: set by Enter key, consumed by effect to avoid setState-in-render
   const [pendingSubmit, setPendingSubmit] = useState<string | null>(null)
 
   // Arrow key history navigation
-  const { onHistoryUp, onHistoryDown, resetHistory } = useArrowKeyHistory(input.value)
+  const { onHistoryUp, onHistoryDown, resetHistory } = useArrowKeyHistory(stateToString(input))
 
   const handleSubmit = useCallback(
     (text: string) => {
       if (!text.trim()) return
 
-      // Append to history, deduplicating
       const newHistory = historyRef.current.filter((h) => h !== text)
       newHistory.push(text)
       if (newHistory.length > MAX_HISTORY) {
@@ -59,13 +79,12 @@ export function PromptInput({ theme, isLoading, onSubmit, onExit }: PromptInputP
       historyRef.current = newHistory
 
       onSubmit(text)
-      setInput({ value: "", cursor: 0 })
+      setInput({ graphemes: [], cursor: 0 })
       resetHistory()
     },
     [onSubmit],
   )
 
-  // Process pending submit outside of render cycle
   useEffect(() => {
     if (pendingSubmit !== null) {
       handleSubmit(pendingSubmit)
@@ -80,50 +99,54 @@ export function PromptInput({ theme, isLoading, onSubmit, onExit }: PromptInputP
     if (key.ctrl) {
       switch (inputChar) {
         case "c": {
-          // Single Ctrl+C: clear input if has text, otherwise exit
           setInput((prev) => {
-            if (prev.value) {
-              return { value: "", cursor: 0 }
+            if (prev.graphemes.length > 0) {
+              return { graphemes: [], cursor: 0 }
             }
-            // Input is empty — exit
             onExit?.()
             return prev
           })
           return
         }
-        case "a": // Move to start
+        case "a":
           setInput((prev) => ({ ...prev, cursor: 0 }))
           return
-        case "e": // Move to end
-          setInput((prev) => ({ ...prev, cursor: prev.value.length }))
+        case "e":
+          setInput((prev) => ({ ...prev, cursor: prev.graphemes.length }))
           return
-        case "u": // Kill line before cursor
+        case "u":
           setInput((prev) => ({
-            value: prev.value.slice(prev.cursor),
+            graphemes: prev.graphemes.slice(prev.cursor),
             cursor: 0,
           }))
           return
-        case "k": // Kill line after cursor
+        case "k":
           setInput((prev) => ({
-            value: prev.value.slice(0, prev.cursor),
+            graphemes: prev.graphemes.slice(0, prev.cursor),
             cursor: prev.cursor,
           }))
           return
-        case "w": // Delete word before cursor
+        case "w": {
           setInput((prev) => {
             if (prev.cursor === 0) return prev
-            const beforeCursor = prev.value.slice(0, prev.cursor)
-            const match = beforeCursor.match(/\S+\s*$/)
-            const deleteCount = match ? match[0].length : 0
-            const newCursor = prev.cursor - deleteCount
+            const before = fromGraphemes(prev.graphemes.slice(0, prev.cursor))
+            const match = before.match(/\S+\s*$/)
+            if (!match) return prev
+            const deleteStr = match[0]
+            const deleteGraphemes = toGraphemes(deleteStr).length
+            const newCursor = Math.max(0, prev.cursor - deleteGraphemes)
             return {
-              value: prev.value.slice(0, newCursor) + prev.value.slice(prev.cursor),
-              cursor: Math.max(0, newCursor),
+              graphemes: [
+                ...prev.graphemes.slice(0, newCursor),
+                ...prev.graphemes.slice(prev.cursor),
+              ],
+              cursor: newCursor,
             }
           })
           return
-        case "l": // Clear input
-          setInput({ value: "", cursor: 0 })
+        }
+        case "l":
+          setInput({ graphemes: [], cursor: 0 })
           return
       }
       return
@@ -131,12 +154,10 @@ export function PromptInput({ theme, isLoading, onSubmit, onExit }: PromptInputP
 
     // --- Escape ---
     if (key.escape) {
-      // Single Escape: clear input if has text, otherwise exit
       setInput((prev) => {
-        if (prev.value) {
-          return { value: "", cursor: 0 }
+        if (prev.graphemes.length > 0) {
+          return { graphemes: [], cursor: 0 }
         }
-        // Input is empty — exit
         onExit?.()
         return prev
       })
@@ -145,10 +166,10 @@ export function PromptInput({ theme, isLoading, onSubmit, onExit }: PromptInputP
 
     // --- Enter ---
     if (key.return) {
-      // Read current value and schedule submit via effect (not inside setState)
       setInput((prev) => {
-        if (prev.value.trim()) {
-          setPendingSubmit(prev.value)
+        const text = stateToString(prev)
+        if (text.trim()) {
+          setPendingSubmit(text)
         }
         return prev
       })
@@ -156,15 +177,14 @@ export function PromptInput({ theme, isLoading, onSubmit, onExit }: PromptInputP
     }
 
     // --- Backspace / Delete ---
-    // Different terminals send different codes for Backspace:
-    // - Some send \b (ASCII 8) → key.backspace
-    // - Some send \x7f (ASCII 127) → key.delete
-    // We treat both as "delete character before cursor"
     if (key.backspace || key.delete) {
       setInput((prev) => {
         if (prev.cursor === 0) return prev
         return {
-          value: prev.value.slice(0, prev.cursor - 1) + prev.value.slice(prev.cursor),
+          graphemes: [
+            ...prev.graphemes.slice(0, prev.cursor - 1),
+            ...prev.graphemes.slice(prev.cursor),
+          ],
           cursor: prev.cursor - 1,
         }
       })
@@ -177,7 +197,10 @@ export function PromptInput({ theme, isLoading, onSubmit, onExit }: PromptInputP
       return
     }
     if (key.rightArrow) {
-      setInput((prev) => ({ ...prev, cursor: Math.min(prev.value.length, prev.cursor + 1) }))
+      setInput((prev) => ({
+        ...prev,
+        cursor: Math.min(prev.graphemes.length, prev.cursor + 1),
+      }))
       return
     }
 
@@ -186,7 +209,8 @@ export function PromptInput({ theme, isLoading, onSubmit, onExit }: PromptInputP
       const reversedHistory = [...historyRef.current].reverse()
       const historyEntry = onHistoryUp(reversedHistory)
       if (historyEntry !== null) {
-        setInput({ value: historyEntry, cursor: historyEntry.length })
+        const g = toGraphemes(historyEntry)
+        setInput({ graphemes: g, cursor: g.length })
       }
       return
     }
@@ -194,9 +218,10 @@ export function PromptInput({ theme, isLoading, onSubmit, onExit }: PromptInputP
       const reversedHistory = [...historyRef.current].reverse()
       const historyEntry = onHistoryDown(reversedHistory)
       if (historyEntry !== null) {
-        setInput({ value: historyEntry, cursor: historyEntry.length })
+        const g = toGraphemes(historyEntry)
+        setInput({ graphemes: g, cursor: g.length })
       } else {
-        setInput({ value: "", cursor: 0 })
+        setInput({ graphemes: [], cursor: 0 })
       }
       return
     }
@@ -204,32 +229,92 @@ export function PromptInput({ theme, isLoading, onSubmit, onExit }: PromptInputP
     // --- Regular text / paste ---
     if (inputChar && !key.ctrl && !key.meta) {
       const normalizedInput = inputChar.replace(/\r\n/g, "\n").replace(/\r/g, "\n")
+      const newGraphemes = toGraphemes(normalizedInput)
       setInput((prev) => ({
-        value:
-          prev.value.slice(0, prev.cursor) + normalizedInput + prev.value.slice(prev.cursor),
-        cursor: prev.cursor + normalizedInput.length,
+        graphemes: [
+          ...prev.graphemes.slice(0, prev.cursor),
+          ...newGraphemes,
+          ...prev.graphemes.slice(prev.cursor),
+        ],
+        cursor: prev.cursor + newGraphemes.length,
       }))
     }
   })
 
-  // Render prompt with cursor indicator
-  const { value, cursor } = input
-  const displayValue = value || ""
+  // Render prompt with visible-width-aware cursor
+  const { graphemes, cursor } = input
+  const value = fromGraphemes(graphemes)
   const promptChar = `${figures.pointer} `
 
+  // Compute visible portions for display, respecting terminal width
+  const termCols = process.stdout.columns || 80
+  const promptWidth = stringWidth(promptChar)
+  const availWidth = Math.max(10, termCols - promptWidth - 2)
+
+  // Split into before/at/after cursor based on grapheme index
+  const beforeCursor = fromGraphemes(graphemes.slice(0, cursor))
+  const atCursor = graphemes[cursor] ?? " "
+  const afterCursor = fromGraphemes(graphemes.slice(cursor + 1))
+
+  // Viewport clipping for long lines
+  const beforeWidth = stringWidth(beforeCursor)
+  const atWidth = stringWidth(atCursor)
+
+  let displayBefore = beforeCursor
+  let displayAt = atCursor
+  let displayAfter = afterCursor
+
+  if (beforeWidth + atWidth > availWidth) {
+    // Cursor is past visible area — clip from left
+    let accumulated = 0
+    let startIdx = 0
+    for (let i = 0; i < cursor; i++) {
+      accumulated += stringWidth(graphemes[i])
+      if (accumulated + atWidth > availWidth) {
+        startIdx = i + 1
+        accumulated -= stringWidth(graphemes[startIdx - 1])
+      }
+    }
+    displayBefore = fromGraphemes(graphemes.slice(startIdx, cursor))
+    // No room for after-cursor text
+    displayAfter = ""
+  } else {
+    // Clip after-cursor if needed
+    const remainWidth = availWidth - beforeWidth - atWidth
+    if (stringWidth(afterCursor) > remainWidth) {
+      let accum = 0
+      let endIdx = 0
+      const afterGraphemes = graphemes.slice(cursor + 1)
+      for (let i = 0; i < afterGraphemes.length; i++) {
+        const gw = stringWidth(afterGraphemes[i])
+        if (accum + gw > remainWidth) break
+        accum += gw
+        endIdx = i + 1
+      }
+      displayAfter = fromGraphemes(afterGraphemes.slice(0, endIdx))
+    }
+  }
+
+  const placeholder = "Type your message..."
+
   return (
-    <Box flexDirection="column" marginTop={1}>
+    <Box flexDirection="column">
       <Box>
         <Text color={theme.prompt} bold>
           {promptChar}
         </Text>
         {isLoading ? (
           <Text color={theme.muted}>(waiting...)</Text>
+        ) : graphemes.length === 0 ? (
+          <Text>
+            <Text backgroundColor={theme.active}>{" "}</Text>
+            <Text color={theme.muted}> {placeholder}</Text>
+          </Text>
         ) : (
           <Text>
-            {displayValue.slice(0, cursor)}
-            <Text backgroundColor={theme.active}>{displayValue[cursor] ?? " "}</Text>
-            {displayValue.slice(cursor + 1)}
+            {displayBefore}
+            <Text backgroundColor={theme.active}>{displayAt}</Text>
+            {displayAfter}
           </Text>
         )}
       </Box>

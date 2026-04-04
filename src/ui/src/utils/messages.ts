@@ -116,6 +116,10 @@ export function reorderMessages(messages: Message[]): Message[] {
  * Calculate the static prefix length — the number of messages that should
  * be placed in Ink's <Static> component (rendered once, never re-rendered).
  * The latest message and any unresolved tool uses should be transient.
+ *
+ * User text messages are always complete (never streaming), so they can
+ * become static immediately to avoid duplicate rendering on terminals
+ * that don't fully support Ink's live-area clearing (e.g. Windows cmd).
  */
 export function getStaticPrefixLength(messages: Message[]): number {
   if (messages.length === 0) return 0
@@ -123,9 +127,17 @@ export function getStaticPrefixLength(messages: Message[]): number {
   const unresolvedIds = getUnresolvedToolUseIds(messages)
   let prefixEnd = messages.length
 
-  // Keep the last message transient (it might be streaming)
+  // Keep the last message transient only if it could be streaming.
+  // User text messages are always complete — making them static immediately
+  // prevents duplicate rendering when they transition from live to static.
   if (prefixEnd > 0) {
-    prefixEnd--
+    const lastMsg = messages[prefixEnd - 1]
+    const isComplete =
+      (lastMsg.role === "user" && lastMsg.type === "text") ||
+      (lastMsg.role === "assistant" && lastMsg.type === "error")
+    if (!isComplete) {
+      prefixEnd--
+    }
   }
 
   // Keep any messages related to unresolved tool uses transient

@@ -188,11 +188,61 @@ class TestEventToNotification:
     def test_unknown_event(self) -> None:
         event = SessionEvent(type=SessionEventType.DONE)
         event.type = SessionEventType.COST_UPDATE  # known but let's check it works
-        event.data = {"cost_usd": 0.01, "total_usd": 0.05}
+        event.data = {
+            "cost_usd": 0.01,
+            "total_usd": 0.05,
+            "input_tokens": 100,
+            "output_tokens": 25,
+            "total_tokens": 125,
+            "cumulative_input_tokens": 300,
+            "cumulative_output_tokens": 75,
+            "cumulative_total_tokens": 375,
+            "duration_ms": 2000,
+        }
         method, params = event_to_notification(event)
         assert method == "session/cost_update"
         assert params["cost_usd"] == 0.01
         assert params["total_usd"] == 0.05
+        assert params["input_tokens"] == 100
+        assert params["cumulative_total_tokens"] == 375
+        assert params["duration_ms"] == 2000
+
+    def test_cost_update_maps_all_extended_fields(self) -> None:
+        """COST_UPDATE notification must include all fields for UI token stats."""
+        event = SessionEvent(
+            type=SessionEventType.COST_UPDATE,
+            data={
+                "cost_usd": 0.02,
+                "total_usd": 0.10,
+                "input_tokens": 500,
+                "output_tokens": 100,
+                "total_tokens": 600,
+                "cumulative_input_tokens": 1500,
+                "cumulative_output_tokens": 300,
+                "cumulative_total_tokens": 1800,
+                "duration_ms": 3500,
+            },
+        )
+        method, params = event_to_notification(event)
+        assert method == "session/cost_update"
+        # Verify all required fields are present and correctly mapped
+        required_fields = [
+            "cost_usd", "total_usd",
+            "input_tokens", "output_tokens", "total_tokens",
+            "cumulative_input_tokens", "cumulative_output_tokens", "cumulative_total_tokens",
+            "duration_ms",
+        ]
+        for field in required_fields:
+            assert field in params, f"Missing field: {field}"
+        assert params["cost_usd"] == 0.02
+        assert params["total_usd"] == 0.10
+        assert params["input_tokens"] == 500
+        assert params["output_tokens"] == 100
+        assert params["total_tokens"] == 600
+        assert params["cumulative_input_tokens"] == 1500
+        assert params["cumulative_output_tokens"] == 300
+        assert params["cumulative_total_tokens"] == 1800
+        assert params["duration_ms"] == 3500
 
 
 # --- _ensure_session ToolLoader integration (Fix 1) ---

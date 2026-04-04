@@ -32,6 +32,24 @@ class TestSessionManagerCost:
         sm.add_cost(0.002)
         assert sm.get_total_cost() == pytest.approx(0.005)
 
+    def test_usage_totals_start_at_zero(self) -> None:
+        sm = SessionManager()
+        assert sm.get_usage_totals() == {
+            "cumulative_input_tokens": 0,
+            "cumulative_output_tokens": 0,
+            "cumulative_total_tokens": 0,
+        }
+
+    def test_add_usage_accumulates(self) -> None:
+        sm = SessionManager()
+        sm.add_usage(120, 45)
+        sm.add_usage(30, 5)
+        assert sm.get_usage_totals() == {
+            "cumulative_input_tokens": 150,
+            "cumulative_output_tokens": 50,
+            "cumulative_total_tokens": 200,
+        }
+
 
 class TestSessionManagerModel:
     def test_default_model(self) -> None:
@@ -64,7 +82,16 @@ class TestSessionManagerProcessInput:
     async def test_tracks_cost_from_events(self) -> None:
         """process_input should accumulate cost from COST_UPDATE events."""
         events_sequence = [
-            SessionEvent(type=SessionEventType.COST_UPDATE, data={"cost_usd": 0.01}),
+            SessionEvent(
+                type=SessionEventType.COST_UPDATE,
+                data={
+                    "cost_usd": 0.01,
+                    "input_tokens": 100,
+                    "output_tokens": 20,
+                    "total_tokens": 120,
+                    "duration_ms": 1500,
+                },
+            ),
             SessionEvent(type=SessionEventType.DONE, data={}),
         ]
 
@@ -74,8 +101,59 @@ class TestSessionManagerProcessInput:
 
         with patch("pode_agent.app.session.query", side_effect=mock_query):
             sm = SessionManager()
-            _ = [e async for e in sm.process_input("hello")]
+            yielded = [e async for e in sm.process_input("hello")]
             assert sm.get_total_cost() == pytest.approx(0.01)
+            assert sm.get_usage_totals() == {
+                "cumulative_input_tokens": 100,
+                "cumulative_output_tokens": 20,
+                "cumulative_total_tokens": 120,
+            }
+            usage_event = next(e for e in yielded if e.type == SessionEventType.COST_UPDATE)
+            assert usage_event.data["total_usd"] == pytest.approx(0.01)
+            assert usage_event.data["cumulative_total_tokens"] == 120
+            assert usage_event.data["duration_ms"] == 1500
+
+    async def test_cost_update_has_full_payload(self) -> None:
+        """COST_UPDATE should contain all required fields for UI consumption."""
+        events_sequence = [
+            SessionEvent(
+                type=SessionEventType.COST_UPDATE,
+                data={
+                    "cost_usd": 0.005,
+                    "input_tokens": 200,
+                    "output_tokens": 50,
+                    "total_tokens": 250,
+                    "duration_ms": 800,
+                },
+            ),
+            SessionEvent(type=SessionEventType.DONE, data={}),
+        ]
+
+        async def mock_query(*args: Any, **kwargs: Any) -> Any:
+            for ev in events_sequence:
+                yield ev
+
+        with patch("pode_agent.app.session.query", side_effect=mock_query):
+            sm = SessionManager()
+            yielded = [e async for e in sm.process_input("hello")]
+            cost_events = [e for e in yielded if e.type == SessionEventType.COST_UPDATE]
+            assert len(cost_events) == 1
+            d = cost_events[0].data
+            # All required fields must exist
+            for key in [
+                "cost_usd", "total_usd",
+                "input_tokens", "output_tokens", "total_tokens",
+                "cumulative_input_tokens", "cumulative_output_tokens", "cumulative_total_tokens",
+                "duration_ms",
+            ]:
+                assert key in d, f"Missing key: {key}"
+            assert d["input_tokens"] == 200
+            assert d["output_tokens"] == 50
+            assert d["total_tokens"] == 250
+            assert d["cumulative_input_tokens"] == 200
+            assert d["cumulative_output_tokens"] == 50
+            assert d["cumulative_total_tokens"] == 250
+            assert d["duration_ms"] == 800
 
 
 class TestSessionManagerLoadFromLog:

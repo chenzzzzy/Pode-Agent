@@ -7,8 +7,11 @@ Dynamically composes the full system prompt from multiple sections:
 4. Tool reminders (available tools summary)
 5. Active plan context (when executing a plan)
 6. Todo list (when todos exist)
+7. Project context (git status, directory structure, README, project docs)
+8. System reminders (mention-derived, instruction file notes)
 
 Reference: docs/agent-loop.md — System Prompt
+Reference: Kode-Agent ``src/services/system/systemPrompt.ts``
 """
 
 from __future__ import annotations
@@ -37,6 +40,7 @@ Key behaviors:
 CWD_TEMPLATE = """
 
 Current working directory: {cwd}
+Current date/time: {datetime}
 """
 
 PLAN_MODE_SYSTEM_PROMPT = """
@@ -88,6 +92,8 @@ def build_system_prompt(
     tools: list[Tool] | None = None,
     plan: Plan | None = None,
     todos: list[dict[str, Any]] | None = None,
+    project_context: dict[str, str] | None = None,
+    system_reminders: list[str] | None = None,
 ) -> str:
     """Assemble the full system prompt from multiple sections.
 
@@ -98,15 +104,20 @@ def build_system_prompt(
         tools: Available tools (adds tool reminders).
         plan: Active plan (adds plan execution context).
         todos: Current todo items (adds todo context).
+        project_context: Project context dict (injected as XML context tags).
+        system_reminders: Extra system reminder strings (mention-derived, etc.).
 
     Returns:
         Fully assembled system prompt string.
     """
     parts = [base]
 
-    # 1. CWD
+    # 1. CWD + current date/time
     if cwd:
-        parts.append(CWD_TEMPLATE.format(cwd=cwd))
+        from datetime import datetime
+
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S %Z").strip()
+        parts.append(CWD_TEMPLATE.format(cwd=cwd, datetime=now_str))
 
     # 2. Plan mode instructions
     if permission_mode is not None:
@@ -150,5 +161,27 @@ def build_system_prompt(
             content = todo.get("content", "")
             todo_lines.append(f"  {marker} {content}")
         parts.append(TODO_CONTEXT_TEMPLATE.format(todo_list="\n".join(todo_lines)))
+
+    # 6. Project context (injected as XML <context> tags, matching Kode-Agent)
+    if project_context:
+        # Filter out projectDocs from inline context (too large);
+        # instruction note is kept as a separate reminder.
+        filtered = {
+            k: v for k, v in project_context.items()
+            if k not in ("projectDocs",)
+        }
+        if filtered:
+            parts.append(
+                "\nAs you answer the user's questions, "
+                "you can use the following context:\n"
+            )
+            for key, value in filtered.items():
+                parts.append(f'<context name="{key}">{value}</context>')
+
+    # 7. System reminders (mention-derived, instruction file notes, etc.)
+    if system_reminders:
+        for reminder in system_reminders:
+            if reminder:
+                parts.append(f"\n{reminder}")
 
     return "".join(parts)

@@ -17,6 +17,16 @@ export interface BaseMessage {
   timestamp: number
 }
 
+export interface UsageStats {
+  inputTokens: number
+  outputTokens: number
+  totalTokens: number
+  cumulativeInputTokens: number
+  cumulativeOutputTokens: number
+  cumulativeTotalTokens: number
+  durationMs: number
+}
+
 // --- Assistant messages ---
 
 export interface AssistantTextMessage extends BaseMessage {

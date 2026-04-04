@@ -60,6 +60,8 @@ from pode_agent.services.hooks.runner import (
     run_stop_hooks,
     run_user_prompt_submit_hooks,
 )
+from pode_agent.services.context import clear_context_cache, get_context
+from pode_agent.services.context.mention_processor import process_mentions
 from pode_agent.services.system.system_prompt import BASE_SYSTEM_PROMPT, build_system_prompt
 from pode_agent.types.session_events import (
     PermissionRequestData,
@@ -94,6 +96,7 @@ class QueryOptions(BaseModel):
     verbose: bool = False
     safe_mode: bool = False
     stream: bool = True
+    command_allowed_tools: list[str] | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -122,6 +125,22 @@ async def query(
     Yields:
         SessionEvent instances.
     """
+    # Step 0a: Process @-mentions in user input (Kode-Agent parity)
+    system_reminders: list[str] = []
+    mentions = process_mentions(prompt, options.cwd or None)
+    if mentions.has_any:
+        mention_reminder = mentions.to_system_reminder()
+        if mention_reminder:
+            system_reminders.append(mention_reminder)
+
+    # Step 0b: Gather project context (Kode-Agent parity)
+    # Context is cached — only first call per session does real I/O
+    try:
+        project_context = await get_context(options.cwd or None)
+    except Exception as exc:
+        logger.warning("Failed to gather project context: %s", exc)
+        project_context = {}
+
     # Build and save user message
     user_msg = {
         "type": "user",
@@ -145,6 +164,8 @@ async def query(
             tools=tools,
             session=session,
             options=options,
+            _project_context=project_context,
+            _system_reminders=system_reminders,
         ):
             if event.type == SessionEventType.DONE:
                 done_emitted = True
@@ -178,6 +199,8 @@ async def query_core(
     _round: int = 0,
     _hook_state: HookState | None = None,
     _stop_hook_attempts: int = 0,
+    _project_context: dict[str, str] | None = None,
+    _system_reminders: list[str] | None = None,
 ) -> AsyncGenerator[SessionEvent, None]:
     """Recursive Agentic Loop: LLM call → tool use → recurse.
 
@@ -192,6 +215,8 @@ async def query_core(
         _round: Current recursion depth (safety counter).
         _hook_state: Hook state carried across injection points.
         _stop_hook_attempts: Stop hook reentry counter.
+        _project_context: Project context dict from context gathering.
+        _system_reminders: System reminder strings (mention-derived, etc.).
 
     Yields:
         SessionEvent instances.
@@ -212,11 +237,15 @@ async def query_core(
 
     # Step 1b2: Load hook configs once (Fix 1)
     if not hook_state.hook_configs:
-        from pode_agent.core.config.loader import get_global_config
+        from pode_agent.core.config.loader import get_current_project_config, get_global_config
         from pode_agent.services.hooks.runner import load_hook_configs
 
         cfg = get_global_config()
-        hook_state.hook_configs = load_hook_configs(user_settings=cfg.model_dump())
+        proj = get_current_project_config()
+        hook_state.hook_configs = load_hook_configs(
+            project_settings=proj.model_dump(),
+            user_settings=cfg.model_dump(),
+        )
 
     # Step 1c: UserPromptSubmit hooks (only on first entry)
     # Extract prompt text from messages (Fix 8)
@@ -241,19 +270,25 @@ async def query_core(
         )
         return
 
-    # 1. Build system prompt with dynamic assembly (Phase 3)
+    # 1. Build system prompt with dynamic assembly (Phase 3 + context injection)
     full_system_prompt = build_system_prompt(
         system_prompt or BASE_SYSTEM_PROMPT,
         options.cwd,
         permission_mode=options.permission_mode,
         tools=tools,
+        project_context=_project_context,
+        system_reminders=_system_reminders,
     )
     # Phase 5: append hook-injected system prompts
     if hook_state.additional_system_prompts:
         full_system_prompt += "\n\n" + "\n\n".join(hook_state.additional_system_prompts)
 
-    # 2. Build tool definitions
-    tool_defs = await _build_tool_definitions(tools)
+    # 2. Build tool definitions (filtered by command_allowed_tools if set)
+    effective_tools = tools
+    if options.command_allowed_tools:
+        allowed = set(options.command_allowed_tools)
+        effective_tools = [t for t in tools if t.name in allowed]
+    tool_defs = await _build_tool_definitions(effective_tools)
 
     # 3. Build request params
     params = UnifiedRequestParams(
@@ -344,6 +379,7 @@ async def query_core(
 
     duration_ms = int((time.monotonic() - start_time) * 1000)
     cost_usd = calculate_model_cost(options.model, token_input, token_output)
+    total_tokens = token_input + token_output
 
     assistant_msg = {
         "type": "assistant",
@@ -354,13 +390,19 @@ async def query_core(
     }
     session.save_message(assistant_msg)
 
-    # Cost tracking
-    if cost_usd > 0:
-        add_to_total_cost(cost_usd)
-        yield SessionEvent(
-            type=SessionEventType.COST_UPDATE,
-            data={"cost_usd": cost_usd, "total_usd": get_total_cost()},
-        )
+    # Usage + cost tracking — always emit so duration reaches the UI
+    add_to_total_cost(cost_usd)
+    yield SessionEvent(
+        type=SessionEventType.COST_UPDATE,
+        data={
+            "cost_usd": cost_usd,
+            "total_usd": get_total_cost(),
+            "input_tokens": token_input,
+            "output_tokens": token_output,
+            "total_tokens": total_tokens,
+            "duration_ms": duration_ms,
+        },
+    )
 
     # 6. No tool uses → check stop hooks, then DONE (Phase 5: stop hook reentry)
     if not tool_use_blocks:
@@ -381,6 +423,8 @@ async def query_core(
                     _round=_round + 1,
                     _hook_state=hook_state,
                     _stop_hook_attempts=_stop_hook_attempts + 1,
+                    _project_context=_project_context,
+                    _system_reminders=_system_reminders,
                 ):
                     yield event
                 return
@@ -432,6 +476,8 @@ async def query_core(
         options=updated_options,
         _round=_round + 1,
         _hook_state=hook_state,
+        _project_context=_project_context,
+        _system_reminders=_system_reminders,
     ):
         yield event
 

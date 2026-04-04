@@ -23,7 +23,9 @@ import type {
   PlanStepState,
   ToolUseConfirm,
   PermissionDecision,
+  UsageStats,
 } from "../types.js"
+import type { CostUpdateParams } from "../rpc/types.js"
 
 let nextMessageId = 1
 function makeId(): string {
@@ -42,6 +44,15 @@ export function useSession(peer: JsonRpcPeer) {
   const [isLoading, setIsLoading] = useState(false)
   const [toolUseConfirm, setToolUseConfirm] = useState<ToolUseConfirm | null>(null)
   const [totalCost, setTotalCost] = useState(0)
+  const [usageStats, setUsageStats] = useState<UsageStats>({
+    inputTokens: 0,
+    outputTokens: 0,
+    totalTokens: 0,
+    cumulativeInputTokens: 0,
+    cumulativeOutputTokens: 0,
+    cumulativeTotalTokens: 0,
+    durationMs: 0,
+  })
   const [planState, setPlanState] = useState<PlanState | null>(null)
   const [lastError, setLastError] = useState<string | null>(null)
 
@@ -144,7 +155,7 @@ export function useSession(peer: JsonRpcPeer) {
         output: typeof p.data === "string"
         ? p.data
         : p.data != null
-          ? JSON.stringify(p.data)
+          ? JSON.stringify(p.data, null, 2)
           : undefined,
         timestamp: Date.now(),
       }
@@ -188,8 +199,17 @@ export function useSession(peer: JsonRpcPeer) {
 
     // session/cost_update
     peer.registerMethod("session/cost_update", (params: unknown) => {
-      const p = params as { cost_usd: number; total_usd: number }
+      const p = params as CostUpdateParams
       setTotalCost(p.total_usd)
+      setUsageStats({
+        inputTokens: p.input_tokens,
+        outputTokens: p.output_tokens,
+        totalTokens: p.total_tokens,
+        cumulativeInputTokens: p.cumulative_input_tokens,
+        cumulativeOutputTokens: p.cumulative_output_tokens,
+        cumulativeTotalTokens: p.cumulative_total_tokens,
+        durationMs: p.duration_ms,
+      })
     })
 
     // session/model_error
@@ -540,16 +560,46 @@ export function useSession(peer: JsonRpcPeer) {
     [peer, toolUseConfirm],
   )
 
+  /** Add a local slash-command result without going through the LLM. */
+  const addLocalMessage = useCallback(
+    (userText: string, responseText: string) => {
+      const userMsg: UserTextMessage = {
+        id: makeId(),
+        role: "user",
+        type: "text",
+        text: userText,
+        timestamp: Date.now(),
+      }
+      const assistantMsg: AssistantTextMessage = {
+        id: makeId(),
+        role: "assistant",
+        type: "text",
+        text: responseText,
+        timestamp: Date.now(),
+      }
+      setMessages((prev) => [...prev, userMsg, assistantMsg])
+    },
+    [],
+  )
+
+  /** Clear all local messages (for /clear). */
+  const clearMessages = useCallback(() => {
+    setMessages([])
+  }, [])
+
   return {
     messages,
     isLoading,
     toolUseConfirm,
     totalCost,
+    usageStats,
     planState,
     lastError,
     submit,
     abort,
     resolvePermission,
+    addLocalMessage,
+    clearMessages,
   }
 }
 

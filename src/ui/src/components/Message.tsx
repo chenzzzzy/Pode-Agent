@@ -2,8 +2,8 @@
  * Message component — dispatcher that routes to the correct sub-component
  * based on message role and type.
  *
- * This is the initial simplified version. Task 4.3 will port all 15+
- * message type components from Kode-Agent.
+ * Uses MarkdownText for assistant text to avoid raw markdown symbol leakage.
+ * Tool results default to compact mode (one-line summary), verbose for full.
  */
 
 import React from "react"
@@ -20,6 +20,7 @@ import type {
   ErrorMessage,
   SubAgentMessage,
 } from "../types.js"
+import { MarkdownText } from "./MarkdownText.js"
 
 export interface MessageProps {
   message: MessageType
@@ -30,7 +31,7 @@ export interface MessageProps {
 export function Message({ message, theme, verbose }: MessageProps) {
   switch (message.role) {
     case "user":
-      return <UserMessageRenderer message={message} theme={theme} />
+      return <UserMessageRenderer message={message} theme={theme} verbose={verbose} />
     case "assistant":
       return <AssistantMessageRenderer message={message} theme={theme} verbose={verbose} />
     default:
@@ -38,7 +39,7 @@ export function Message({ message, theme, verbose }: MessageProps) {
   }
 }
 
-function UserMessageRenderer({ message, theme }: { message: MessageType; theme: Theme }) {
+function UserMessageRenderer({ message, theme, verbose }: { message: MessageType; theme: Theme; verbose?: boolean }) {
   if (message.role !== "user") return null
 
   switch (message.type) {
@@ -70,13 +71,21 @@ function UserMessageRenderer({ message, theme }: { message: MessageType; theme: 
             : m.resultStatus === "rejected"
               ? "REJECTED"
               : "CANCELED"
+
+      // Compact mode: one-line summary. Verbose: full output.
+      const compactOutput = m.output ? formatCompactOutput(m.output) : undefined
       return (
-        <Box paddingLeft={2} marginTop={0}>
+        <Box paddingLeft={2} marginTop={0} flexDirection="column">
           <Text color={color}>
             {"  "}[{label}] {m.toolName}
+            {compactOutput && !verbose && (
+              <Text color={theme.muted}> {compactOutput}</Text>
+            )}
           </Text>
-          {m.output && (
-            <Text color={theme.muted}> {truncate(m.output, 200)}</Text>
+          {verbose && m.output && (
+            <Box paddingLeft={4}>
+              <Text color={theme.muted}>{formatVerboseOutput(m.output)}</Text>
+            </Box>
           )}
         </Box>
       )
@@ -102,10 +111,7 @@ function AssistantMessageRenderer({
       const m = message as AssistantTextMessage
       return (
         <Box flexDirection="column" marginTop={1}>
-          <Text>{m.text}</Text>
-          {m.costUsd !== undefined && m.costUsd > 0 && (
-            <Text color={theme.cost}> Cost: ${m.costUsd.toFixed(4)}</Text>
-          )}
+          <MarkdownText text={m.text} theme={theme} />
         </Box>
       )
     }
@@ -119,7 +125,9 @@ function AssistantMessageRenderer({
             {formatToolInput(m.toolInput)})
           </Text>
           {m.output && verbose && (
-            <Text color={theme.muted}>{m.output}</Text>
+            <Box paddingLeft={4}>
+              <Text color={theme.muted}>{formatVerboseOutput(m.output)}</Text>
+            </Box>
           )}
         </Box>
       )
@@ -262,8 +270,38 @@ function formatToolInput(input: Record<string, unknown>): string {
     .join(", ")
 }
 
+/** Format output for compact display — first meaningful line, truncated. */
+function formatCompactOutput(output: string): string {
+  // Try to parse JSON for prettier summary
+  try {
+    const parsed = JSON.parse(output)
+    if (typeof parsed === "object" && parsed !== null) {
+      const keys = Object.keys(parsed)
+      if (keys.length <= 3) {
+        return keys.map((k) => `${k}=${truncate(String(parsed[k]), 20)}`).join(", ")
+      }
+      return `{${keys.length} fields}`
+    }
+  } catch {
+    // Not JSON, use as text
+  }
+
+  const firstLine = output.split(/\n/)[0] || ""
+  return truncate(firstLine, 100)
+}
+
+/** Format output for verbose display — pretty-print JSON if possible. */
+function formatVerboseOutput(output: string): string {
+  try {
+    const parsed = JSON.parse(output)
+    return JSON.stringify(parsed, null, 2)
+  } catch {
+    return output
+  }
+}
+
 function truncate(s: string, maxLen: number): string {
-  const oneLine = s.replace(/\n/g, "\\n")
+  const oneLine = s.replace(/\n/g, " ").replace(/\s+/g, " ").trim()
   if (oneLine.length <= maxLen) return oneLine
   return oneLine.slice(0, maxLen - 3) + "..."
 }

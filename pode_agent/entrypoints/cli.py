@@ -10,6 +10,7 @@ Reference: docs/modules.md — Entrypoints layer
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import os
 import sys
 from pathlib import Path
@@ -104,11 +105,14 @@ def main(
             config_check = get_global_config()
             errors = validate_provider_config(effective_model, config_check)
             if errors:
-                env_model = os.environ.get("DASHSCOPE_MODEL", "").strip()
-                if env_model:
-                    alt_errors = validate_provider_config(env_model, config_check)
-                    if not alt_errors:
-                        effective_model = env_model
+                # Try env-based model fallbacks: DASHSCOPE_MODEL, GLM_MODEL
+                for env_key in ("DASHSCOPE_MODEL", "GLM_MODEL"):
+                    env_model = os.environ.get(env_key, "").strip()
+                    if env_model:
+                        alt_errors = validate_provider_config(env_model, config_check)
+                        if not alt_errors:
+                            effective_model = env_model
+                            break
 
         async def _run_print(
             p: str, opts: PrintModeOptions,
@@ -260,9 +264,15 @@ async def _launch_repl(*, model: str = DEFAULT_MODEL_NAME, safe_mode: bool = Fal
     except KeyboardInterrupt:
         pass
     finally:
-        writer.close()
-        await writer.wait_closed()
-        server.close()
+        # Suppress Windows ProactorBasePipeTransport cleanup warnings
+        import warnings
+        warnings.filterwarnings("ignore", category=ResourceWarning)
+
+        with contextlib.suppress(Exception):
+            writer.close()
+            await writer.wait_closed()
+        with contextlib.suppress(Exception):
+            server.close()
         if proc.returncode is None:
             proc.terminate()
             try:
