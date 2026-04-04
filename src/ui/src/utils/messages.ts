@@ -141,8 +141,9 @@ export function getStaticPrefixLength(messages: Message[]): number {
   }
 
   // Keep any messages related to unresolved tool uses transient
-  for (let i = prefixEnd; i >= 0; i--) {
+  for (let i = prefixEnd - 1; i >= 0; i--) {
     const msg = messages[i]
+    if (!msg) continue
     if (
       (msg.role === "assistant" && msg.type === "tool_use" && unresolvedIds.has(msg.toolUseId)) ||
       (msg.role === "user" && msg.type === "tool_result" && msg.resultStatus === "error") ||
