@@ -167,6 +167,12 @@ def add_marketplace(
     parsed = parse_source_string(source)
     parsed.ref = ref
 
+    # Validate file/dir sources exist
+    if parsed.type in ("file", "dir", "directory"):
+        source_path = Path(parsed.path) if parsed.path else Path(source.split(":", 1)[1])
+        if not source_path.exists():
+            raise FileNotFoundError(f"Source path does not exist: {source_path}")
+
     marketplace_name = name or _derive_marketplace_name(parsed)
 
     registry = _load_known_marketplaces()

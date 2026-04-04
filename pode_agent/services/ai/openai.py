@@ -258,7 +258,7 @@ class OpenAIProvider(AIProvider):
                     func_name = getattr(func, "name", "") if func else ""
                     yield AIResponse(
                         type="tool_use_start",
-                        tool_use_id=tc_id,
+                        tool_use_id=str(tc_id),
                         tool_name=func_name or "",
                     )
                 elif func:

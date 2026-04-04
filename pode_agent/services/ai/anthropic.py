@@ -203,9 +203,10 @@ class AnthropicProvider(AIProvider):
 
             elif delta_type == "input_json_delta":
                 # Tool use JSON delta — yield for buffering by caller
+                idx = getattr(event, "index", None)
                 yield AIResponse(
                     type="tool_use_delta",
-                    tool_use_id=getattr(event, "index", None),
+                    tool_use_id=str(idx) if idx is not None else None,
                     text=delta.partial_json,
                 )
 
@@ -214,7 +215,7 @@ class AnthropicProvider(AIProvider):
             if getattr(cb, "type", "") == "tool_use":
                 yield AIResponse(
                     type="tool_use_start",
-                    tool_use_id=cb.id,
+                    tool_use_id=str(cb.id) if cb.id is not None else None,
                     tool_name=cb.name,
                 )
 

@@ -38,12 +38,23 @@ class TestVersion:
 
 class TestNoPrompt:
     @patch("pode_agent.entrypoints.cli.asyncio")
-    def test_no_args_launches_repl(self, mock_asyncio: MagicMock) -> None:
+    @patch("pode_agent.entrypoints.cli.sys")
+    def test_no_args_launches_repl(self, mock_sys: MagicMock, mock_asyncio: MagicMock) -> None:
         """Without args, CLI attempts to launch REPL."""
+        mock_sys.stdin.isatty.return_value = True
+        mock_sys.stdout.isatty.return_value = True
         mock_asyncio.run.return_value = 0
         result = runner.invoke(app, [])
         assert result.exit_code == 0
         mock_asyncio.run.assert_called_once()
+
+    @patch("pode_agent.entrypoints.cli.sys")
+    def test_no_tty_exits_with_error(self, mock_sys: MagicMock) -> None:
+        """Without TTY, CLI shows error and exits 1."""
+        mock_sys.stdin.isatty.return_value = False
+        mock_sys.stdout.isatty.return_value = True
+        result = runner.invoke(app, [])
+        assert result.exit_code == 1
 
     def test_no_args_bun_not_found(self) -> None:
         """Without Bun installed, shows error and exits 1."""
@@ -70,7 +81,7 @@ class TestPrintMode:
         mock_asyncio.run.return_value = 0
         mock_registry.return_value.tools = []
 
-        result = runner.invoke(app, ["hello world"])
+        result = runner.invoke(app, ["-p", "hello world"])
         assert result.exit_code == 0
         mock_asyncio.run.assert_called_once()
 
@@ -83,7 +94,7 @@ class TestPrintMode:
         mock_registry.return_value.tools = []
 
         # Options must come before positional argument in Typer
-        result = runner.invoke(app, ["--model", "gpt-4o", "test prompt"])
+        result = runner.invoke(app, ["--model", "gpt-4o", "-p", "test prompt"])
         assert result.exit_code == 0
         assert mock_asyncio.run.called
 
@@ -95,7 +106,7 @@ class TestPrintMode:
         mock_asyncio.run.return_value = 0
         mock_registry.return_value.tools = []
 
-        result = runner.invoke(app, ["--output-format", "json", "test"])
+        result = runner.invoke(app, ["--output-format", "json", "-p", "test"])
         assert result.exit_code == 0
         assert mock_asyncio.run.called
 
@@ -107,7 +118,7 @@ class TestPrintMode:
         mock_asyncio.run.return_value = 0
         mock_registry.return_value.tools = []
 
-        result = runner.invoke(app, ["--verbose", "test"])
+        result = runner.invoke(app, ["--verbose", "-p", "test"])
         assert result.exit_code == 0
         assert mock_asyncio.run.called
 
@@ -119,7 +130,7 @@ class TestPrintMode:
         mock_asyncio.run.return_value = 0
         mock_registry.return_value.tools = []
 
-        result = runner.invoke(app, ["--safe", "test"])
+        result = runner.invoke(app, ["--safe", "-p", "test"])
         assert result.exit_code == 0
         assert mock_asyncio.run.called
 
@@ -131,7 +142,7 @@ class TestPrintMode:
         mock_asyncio.run.return_value = 1
         mock_registry.return_value.tools = []
 
-        result = runner.invoke(app, ["test"])
+        result = runner.invoke(app, ["-p", "test"])
         assert result.exit_code == 1
 
     @patch("pode_agent.entrypoints.cli.asyncio")
@@ -142,7 +153,7 @@ class TestPrintMode:
         mock_asyncio.run.return_value = 2
         mock_registry.return_value.tools = []
 
-        result = runner.invoke(app, ["test"])
+        result = runner.invoke(app, ["-p", "test"])
         assert result.exit_code == 2
 
 
@@ -217,7 +228,7 @@ class TestToolLoaderIntegration:
         with patch("pode_agent.app.print_mode.run_print_mode", new_callable=AsyncMock, return_value=0):
             with patch("pode_agent.entrypoints.cli.asyncio") as mock_aio:
                 mock_aio.run = real_asyncio.run
-                result = runner.invoke(app, ["test prompt"])
+                result = runner.invoke(app, ["-p", "test prompt"])
 
         assert result.exit_code == 0
         mock_loader.load_all.assert_called_once()

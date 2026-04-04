@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import sys
 from pathlib import Path
 
 import typer
@@ -45,8 +46,9 @@ def _version_callback(value: bool) -> None:
 @app.callback(invoke_without_command=True)
 def main(
     ctx: typer.Context,
-    prompt: str | None = typer.Argument(
+    prompt: str | None = typer.Option(
         None,
+        "--prompt", "-p",
         help="Prompt for single-query print mode.",
     ),
     version: bool = typer.Option(
@@ -94,6 +96,19 @@ def main(
         from pode_agent.core.config.loader import get_global_config
         from pode_agent.core.tools.loader import ToolLoader
         from pode_agent.core.tools.registry import ToolRegistry
+        from pode_agent.services.ai.factory import validate_provider_config
+
+        # Auto-detect model from env if the default is not configured
+        effective_model = model
+        if effective_model == DEFAULT_MODEL_NAME:
+            config_check = get_global_config()
+            errors = validate_provider_config(effective_model, config_check)
+            if errors:
+                env_model = os.environ.get("DASHSCOPE_MODEL", "").strip()
+                if env_model:
+                    alt_errors = validate_provider_config(env_model, config_check)
+                    if not alt_errors:
+                        effective_model = env_model
 
         async def _run_print(
             p: str, opts: PrintModeOptions,
@@ -106,7 +121,7 @@ def main(
             return await run_print_mode(p, tools, opts)
 
         opts = PrintModeOptions(
-            model=model,
+            model=effective_model,
             output_format=output_format,
             verbose=verbose,
             safe_mode=safe_mode,
@@ -115,7 +130,18 @@ def main(
         exit_code = asyncio.run(_run_print(prompt, opts))
         raise typer.Exit(code=exit_code)
 
-    # Interactive REPL: spawn Bun + Ink UI with JSON-RPC bridge
+    # Interactive REPL: check for TTY before spawning
+    if not sys.stdin.isatty() or not sys.stdout.isatty():
+        typer.echo(
+            "Error: Pode-Agent requires an interactive terminal (TTY).\n\n"
+            "If running from a script or pipe, use print mode instead:\n"
+            "  pode -p \"your prompt here\"\n\n"
+            "Or run directly in a terminal:\n"
+            "  uv run pode",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+
     exit_code = asyncio.run(_launch_repl(model=model, safe_mode=safe_mode))
     raise typer.Exit(code=exit_code)
 
@@ -254,7 +280,6 @@ config_app = typer.Typer(
     help="Manage configuration values.",
     no_args_is_help=True,
 )
-app.add_typer(config_app, name="config")
 
 
 @config_app.command("get")
@@ -295,13 +320,8 @@ def config_list(
         typer.echo(f"{k} = {v}")
 
 
-if __name__ == "__main__":
-    app()
-
-
-def run() -> None:
-    """Console script entry point."""
-    app()
+# Register config group AFTER all commands are defined
+app.add_typer(config_app, name="config")
 
 
 # --- Plugin subcommand group (Phase 5) ---
@@ -311,7 +331,6 @@ plugin_app = typer.Typer(
     help="Manage plugins and skills.",
     no_args_is_help=True,
 )
-app.add_typer(plugin_app, name="plugin")
 
 
 @plugin_app.command("install")
@@ -402,6 +421,10 @@ def plugin_refresh() -> None:
     typer.echo("Cache refreshed.")
 
 
+# Register plugin group after all commands
+app.add_typer(plugin_app, name="plugin")
+
+
 # --- Marketplace subcommand group ---
 
 marketplace_app = typer.Typer(
@@ -478,3 +501,11 @@ def marketplace_update(
         typer.echo(f"Error: {e}", err=True)
         raise typer.Exit(code=1) from None
 
+
+if __name__ == "__main__":
+    app()
+
+
+def run() -> None:
+    """Console script entry point."""
+    app()

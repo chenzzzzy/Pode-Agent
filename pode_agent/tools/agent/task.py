@@ -383,6 +383,8 @@ class TaskTool(Tool):
         options = QueryOptions(
             model=model,
             cwd=str(os.getcwd()),
+            permission_mode=context.options.permission_mode,
+            safe_mode=context.options.safe_mode,
         )
 
         try:
@@ -518,6 +520,7 @@ class TaskTool(Tool):
         """Run sub-agent in background, updating task registry."""
         from pode_agent.app.query import QueryOptions, query_core
         from pode_agent.app.sub_session import create_sub_session
+        from pode_agent.core.permissions.types import PermissionMode
         from pode_agent.types.agent import BackgroundAgentStatus
 
         start_time = time.monotonic()
@@ -544,6 +547,11 @@ class TaskTool(Tool):
         options = QueryOptions(
             model=model,
             cwd=str(os.getcwd()),
+            permission_mode=getattr(
+                getattr(parent_session, "permission_context", None),
+                "mode",
+                PermissionMode.ACCEPT_EDITS,
+            ) if parent_session else PermissionMode.ACCEPT_EDITS,
         )
 
         tool_use_count = 0

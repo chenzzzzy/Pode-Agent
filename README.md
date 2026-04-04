@@ -105,6 +105,9 @@
 | [实施计划](./docs/phases.md)          | 分阶段开发计划，含优先级和依赖 | PM、Tech Lead |
 | [API 规范](./docs/api-specs.md)     | 模块间内部 API 契约 | 开发者 |
 | [测试策略](./docs/testing-strategy.md) | 单元/集成/E2E 测试方案 | QA、开发者 |
+| [E2E 测试用例](./docs/e2e-test-prompts.md) | **E2E 测试提示词集**：覆盖 CLI、REPL、工具、权限、Plan Mode、Skills 等场景 | QA、开发者 |
+| [E2E 测试结果](./docs/e2e-test-result.md) | **E2E 测试执行报告**：CLI、配置、Print Mode、Plugin 等功能测试结果 | QA、开发者 |
+| [已知问题](./docs/need2fix.md) | UI 交互问题清单与修复计划 | 开发者 |
 | [SubAgent 系统](./docs/subagent-system.md) | **SubAgent 权威文档**：TaskTool、Agent 配置加载、ForkContext、前台/后台执行、工具权限隔离 | 开发者 |
 | [Skill 系统](./docs/skill-system.md) | **Skill System 权威文档**：技能发现、自定义命令、YAML Frontmatter、Marketplace、contextModifier、Plugin 架构 | 开发者 |
 
