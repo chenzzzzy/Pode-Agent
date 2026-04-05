@@ -195,7 +195,8 @@ class ContextModifier(BaseModel):
         if self.model is not None:
             updates["model"] = self._MODEL_MAP.get(self.model, self.model)
         if self.max_thinking_tokens is not None:
-            updates["max_thinking_tokens"] = self.max_thinking_tokens
+            # QueryOptions uses 'thinking_tokens', not 'max_thinking_tokens'
+            updates["thinking_tokens"] = self.max_thinking_tokens
         if not updates:
             return options
         return options.model_copy(update=updates)

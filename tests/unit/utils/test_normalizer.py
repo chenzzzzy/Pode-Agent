@@ -2,10 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Any
-
-import pytest
-
 from pode_agent.core.config.schema import ProviderType
 from pode_agent.services.ai.base import ToolUseBlock
 from pode_agent.utils.messages.normalizer import (
@@ -15,7 +11,6 @@ from pode_agent.utils.messages.normalizer import (
     to_anthropic_messages,
     to_openai_messages,
 )
-
 
 # ---------------------------------------------------------------------------
 # normalize_messages_for_provider
@@ -132,6 +127,16 @@ class TestBuildToolResultMessage:
         tool_uses = [ToolUseBlock(id="tu_001", name="bash", input={})]
         msg = build_tool_result_message(tool_uses, {})
         assert msg["content"][0]["content"] == ""
+
+    def test_large_result_is_truncated_for_llm(self) -> None:
+        tool_uses = [ToolUseBlock(id="tu_001", name="bash", input={})]
+        results = {"tu_001": "\n".join(f"line {i}" for i in range(200))}
+
+        msg = build_tool_result_message(tool_uses, results)
+
+        content = msg["content"][0]["content"]
+        assert "[truncated" in content
+        assert "line 0" in content
 
 
 # ---------------------------------------------------------------------------

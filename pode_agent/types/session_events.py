@@ -63,6 +63,22 @@ class PermissionRequestData(BaseModel):
     description: str | None = None
 
 
+# --- Usage / cost event data models ---
+
+
+class CostUpdateData(BaseModel):
+    """Data payload for a ``COST_UPDATE`` event."""
+
+    cost_usd: float = 0.0
+    total_usd: float = 0.0
+    input_tokens: int = 0
+    output_tokens: int = 0
+    total_tokens: int = 0
+    cumulative_input_tokens: int = 0
+    cumulative_output_tokens: int = 0
+    cumulative_total_tokens: int = 0
+
+
 # --- Plan mode event data models ---
 
 

@@ -52,6 +52,8 @@ from pode_agent.services.ai.base import (
     UnifiedRequestParams,
 )
 from pode_agent.services.ai.factory import query_llm
+from pode_agent.services.context import get_context
+from pode_agent.services.context.mention_processor import process_mentions
 from pode_agent.services.hooks.base import HookState
 from pode_agent.services.hooks.runner import (
     MAX_STOP_HOOK_ATTEMPTS,
@@ -60,8 +62,6 @@ from pode_agent.services.hooks.runner import (
     run_stop_hooks,
     run_user_prompt_submit_hooks,
 )
-from pode_agent.services.context import clear_context_cache, get_context
-from pode_agent.services.context.mention_processor import process_mentions
 from pode_agent.services.system.system_prompt import BASE_SYSTEM_PROMPT, build_system_prompt
 from pode_agent.types.session_events import (
     PermissionRequestData,
@@ -230,7 +230,10 @@ async def query_core(
         return
 
     # Step 1a: auto-compact if needed
-    messages = auto_compact_if_needed(messages)
+    compacted_messages = await auto_compact_if_needed(messages, options)
+    if compacted_messages is not messages:
+        session.replace_messages(compacted_messages)
+    messages = compacted_messages
 
     # Step 1b: Hook state (Phase 5)
     hook_state = _hook_state or HookState()
@@ -309,6 +312,8 @@ async def query_core(
     current_tool_id: str | None = None  # fallback for deltas without tool_use_id
     token_input = 0
     token_output = 0
+    cache_read_tokens = 0
+    cache_write_tokens = 0
 
     start_time = time.monotonic()
 
@@ -349,6 +354,8 @@ async def query_core(
             if resp.usage:
                 token_input = resp.usage.input_tokens
                 token_output = resp.usage.output_tokens
+                cache_read_tokens = resp.usage.cache_read_tokens
+                cache_write_tokens = resp.usage.cache_write_tokens
 
         elif resp.type == "error":
             yield SessionEvent(
@@ -387,6 +394,12 @@ async def query_core(
         "message": assistant_content,
         "cost_usd": cost_usd,
         "duration_ms": duration_ms,
+        "usage": {
+            "input_tokens": token_input,
+            "output_tokens": token_output,
+            "cache_read_tokens": cache_read_tokens,
+            "cache_write_tokens": cache_write_tokens,
+        },
     }
     session.save_message(assistant_msg)
 

@@ -20,7 +20,7 @@ ENV/
 
 # Testing
 .pytest_cache/
-.coverage
+tests/e2e/e2e_output/
 htmlcov/
 coverage.xml
 

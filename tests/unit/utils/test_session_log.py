@@ -5,14 +5,12 @@ Reference: docs/api-specs.md — Session Log API
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
-
-import pytest
 
 from pode_agent.utils.protocol.session_log import (
     get_session_log_path,
     load_messages_from_log,
+    rewrite_messages,
     save_message,
 )
 
@@ -28,6 +26,11 @@ class TestSessionLogPath:
         path = get_session_log_path(fork_number=3, base_dir=tmp_path)
         assert "fork_3" in path.name
 
+    def test_generates_unique_paths_per_session(self, tmp_path: Any) -> None:
+        first = get_session_log_path(base_dir=tmp_path)
+        second = get_session_log_path(base_dir=tmp_path)
+        assert first != second
+
     def test_creates_log_directory(self, tmp_path: Any) -> None:
         subdir = tmp_path / "logs"
         get_session_log_path(base_dir=subdir)
@@ -40,7 +43,7 @@ class TestSessionLogWrite:
         save_message(log, {"type": "user", "message": "hello"})
 
         content = log.read_text()
-        lines = [l for l in content.strip().split("\n") if l]
+        lines = [line for line in content.strip().split("\n") if line]
         assert len(lines) == 1
         assert '"type": "user"' in lines[0]
 
@@ -50,8 +53,17 @@ class TestSessionLogWrite:
         save_message(log, {"type": "assistant", "message": "second"})
 
         content = log.read_text()
-        lines = [l for l in content.strip().split("\n") if l]
+        lines = [line for line in content.strip().split("\n") if line]
         assert len(lines) == 2
+
+    def test_rewrite_messages_replaces_existing_history(self, tmp_path: Any) -> None:
+        log = tmp_path / "test.jsonl"
+        save_message(log, {"n": 1})
+        save_message(log, {"n": 2})
+
+        rewrite_messages(log, [{"n": 3}])
+
+        assert load_messages_from_log(log) == [{"n": 3}]
 
 
 class TestSessionLogRead:

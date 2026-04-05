@@ -1,0 +1,9 @@
+{
+  "name": "test-echo-plugin",
+  "version": "1.0.0",
+  "description": "A test plugin for E2E testing",
+  "author": "pode-agent-test",
+  "keywords": ["test", "echo"],
+  "skills": ["skills/greet"],
+  "commands": ["commands"]
+}

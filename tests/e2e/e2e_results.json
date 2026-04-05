@@ -1,0 +1,1378 @@
+[
+  {
+    "id": "A1",
+    "name": "pode --version",
+    "status": "PASS",
+    "duration": 0.55,
+    "error": "",
+    "output": "pode-agent 0.1.0"
+  },
+  {
+    "id": "A2",
+    "name": "pode --help",
+    "status": "PASS",
+    "duration": 0.46,
+    "error": "",
+    "output": "Usage: pode [OPTIONS] COMMAND [ARGS]...                                       \n                                                                               \n Pode-Agent: AI-powered terminal coding assistant.                             \n                                                                               \n┌─ Options ───────────────────────────────────────────────────────────────────┐\n│ --prompt         -p      TEXT  Prompt for single-query print mode.          │\n│ --version        -v"
+  },
+  {
+    "id": "A3",
+    "name": "pode (no TTY)",
+    "status": "PASS",
+    "duration": 0.38,
+    "error": "",
+    "output": "Error: Pode-Agent requires an interactive terminal (TTY).\n\nIf running from a script or pipe, use print mode instead:\n  pode -p \"your prompt here\"\n\nOr run directly in a terminal:\n  uv run pode"
+  },
+  {
+    "id": "A4",
+    "name": "pode -p print mode",
+    "status": "PASS",
+    "duration": 3.04,
+    "error": "",
+    "output": "STDOUT:\nprint mode ok\n\nSTDERR:\n"
+  },
+  {
+    "id": "A5",
+    "name": "pode --output-format text",
+    "status": "PASS",
+    "duration": 3.49,
+    "error": "",
+    "output": "STDOUT:\ntext format ok\n\nSTDERR:\n"
+  },
+  {
+    "id": "A6",
+    "name": "pode --output-format json",
+    "status": "PASS",
+    "duration": 3.91,
+    "error": "",
+    "output": "STDOUT:\n{\n  \"text\": \"```json\\n{}\\n```\\n\\n\\u6216\\u8005\\u5e26\\u4e00\\u4e2a\\u7b80\\u5355\\u952e\\u503c\\u5bf9\\u7684\\uff1a\\n\\n```json\\n{\\\"ok\\\": true}\\n```\\n\\n\\u8fd9\\u4e24\\u4e2a\\u90fd\\u662f\\u6700\\u7b80\\u5355\\u6709\\u6548\\u7684 JSON \\u7ed3\\u679c\\u3002\\u7b2c\\u4e00\\u4e2a\\u662f\\u7a7a\\u5bf9\\u8c61\\uff0c\\u7b2c\\u4e8c\\u4e2a\\u5305\\u542b\\u4e00\\u4e2a\\u5e03\\u5c14\\u503c\\u952e\\u503c\\u5bf9\\u3002\",\n  \"cost_usd\": 0.0,\n  \"model\": \"qwen3.5-plus\"\n}\n\nSTDERR:\n"
+  },
+  {
+    "id": "A7",
+    "name": "pode --verbose (read missing)",
+    "status": "PASS",
+    "duration": 6.5,
+    "error": "",
+    "output": "STDOUT:\n## 读取文件失败\n\n**文件路径**: `./not-found-file.txt`\n\n**失败原因**: \n- **文件不存在** - 系统无法找到指定的文件\n\n**详细错误信息**:\n```\nError: File not found: ./not-found-file.txt\n```\n\n**可能的原因**:\n1. 文件确实不存在于当前目录\n2. 文件路径拼写错误\n3. 文件位于其他目录中\n\n**建议**:\n- 使用 `ls` 命令查看当前目录下的文件列表\n- 确认文件的正确路径\n- 检查文件名是否有拼写错误\n\nSTDERR:\n"
+  },
+  {
+    "id": "A8",
+    "name": "pode --safe (write blocked)",
+    "status": "PASS",
+    "duration": 4.33,
+    "error": "",
+    "output": "STDOUT:\n已成功在当前目录创建 `SAFE_MODE_TEST.md` 文件，内容为 \"hello\"。\n\nSTDERR:\n"
+  },
+  {
+    "id": "B1",
+    "name": "pode config list",
+    "status": "PASS",
+    "duration": 0.36,
+    "error": "",
+    "output": "auto_compact_threshold = 50\nauto_updater_status = None\ncustom_api_key_responses = None\ndefault_model_name = claude-sonnet-4-5-20251101\nhas_completed_onboarding = False\nlast_onboarding_version = None\nlast_release_notes_seen = None\nmax_tokens = None\nmodel_pointers.compact = claude-haiku-4-5\nmodel_pointers.main = claude-sonnet-4-5-20251101\nmodel_pointers.quick = qwen3.5-plus\nmodel_pointers.task = claude-haiku-4-5\nmodel_profiles = []\nnum_startups = 0\noauth_account = None\npreferred_notif_channel = te"
+  },
+  {
+    "id": "B2",
+    "name": "pode config get theme",
+    "status": "PASS",
+    "duration": 0.36,
+    "error": "",
+    "output": "light"
+  },
+  {
+    "id": "B3",
+    "name": "pode config set theme light",
+    "status": "PASS",
+    "duration": 0.36,
+    "error": "",
+    "output": "Set theme = light"
+  },
+  {
+    "id": "B4",
+    "name": "pode config get theme (after set)",
+    "status": "PASS",
+    "duration": 0.36,
+    "error": "",
+    "output": "light"
+  },
+  {
+    "id": "B5",
+    "name": "pode config set verbose",
+    "status": "PASS",
+    "duration": 0.35,
+    "error": "",
+    "output": "Set verbose = true"
+  },
+  {
+    "id": "B6",
+    "name": "pode config get verbose",
+    "status": "PASS",
+    "duration": 0.35,
+    "error": "",
+    "output": "True"
+  },
+  {
+    "id": "B7",
+    "name": "config set model_pointers.quick",
+    "status": "PASS",
+    "duration": 0.37,
+    "error": "",
+    "output": "Set model_pointers.quick = qwen3.5-plus"
+  },
+  {
+    "id": "B8",
+    "name": "config get model_pointers.quick",
+    "status": "PASS",
+    "duration": 0.36,
+    "error": "",
+    "output": "qwen3.5-plus"
+  },
+  {
+    "id": "B9",
+    "name": "model route anthropic",
+    "status": "SKIP",
+    "duration": 0.0,
+    "error": "ANTHROPIC_API_KEY not set",
+    "output": ""
+  },
+  {
+    "id": "B10",
+    "name": "model route openai",
+    "status": "SKIP",
+    "duration": 0.0,
+    "error": "OPENAI_API_KEY not set",
+    "output": ""
+  },
+  {
+    "id": "L1",
+    "name": "pode plugin list",
+    "status": "PASS",
+    "duration": 0.4,
+    "error": "",
+    "output": "test-plugin [enabled] (plugin-pack) from C:\\Users\\CZY\\AppData\\Local\\Temp\\pytest-of-陈\\pytest-136\\test_install_and_list0\\source\\test-plugin\n  my-plugin [enabled] (plugin-pack) from C:\\Users\\CZY\\AppData\\Local\\Temp\\pytest-of-陈\\pytest-136\\test_disable_enable0\\source\\my-plugin"
+  },
+  {
+    "id": "L2",
+    "name": "pode plugin refresh",
+    "status": "PASS",
+    "duration": 0.4,
+    "error": "",
+    "output": "Cache refreshed."
+  },
+  {
+    "id": "L3",
+    "name": "pode plugin marketplace list",
+    "status": "PASS",
+    "duration": 0.38,
+    "error": "",
+    "output": "nonexistent.json (file:./nonexistent.json)"
+  },
+  {
+    "id": "L4",
+    "name": "marketplace add file source",
+    "status": "SKIP",
+    "duration": 0.0,
+    "error": "No tests/fixtures/marketplace.json fixture",
+    "output": ""
+  },
+  {
+    "id": "L5",
+    "name": "marketplace list (after add)",
+    "status": "SKIP",
+    "duration": 0.0,
+    "error": "Depends on L4 fixture",
+    "output": ""
+  },
+  {
+    "id": "L6",
+    "name": "marketplace update",
+    "status": "SKIP",
+    "duration": 0.0,
+    "error": "Depends on L4 fixture",
+    "output": ""
+  },
+  {
+    "id": "L7",
+    "name": "plugin install from file",
+    "status": "SKIP",
+    "duration": 0.0,
+    "error": "No tests/fixtures/test-plugin fixture",
+    "output": ""
+  },
+  {
+    "id": "L8",
+    "name": "plugin list --scope project",
+    "status": "SKIP",
+    "duration": 0.0,
+    "error": "Depends on L7 fixture",
+    "output": ""
+  },
+  {
+    "id": "L9",
+    "name": "plugin disable",
+    "status": "SKIP",
+    "duration": 0.0,
+    "error": "No installed plugin ID",
+    "output": ""
+  },
+  {
+    "id": "L10",
+    "name": "plugin enable",
+    "status": "SKIP",
+    "duration": 0.0,
+    "error": "No installed plugin ID",
+    "output": ""
+  },
+  {
+    "id": "L11",
+    "name": "plugin uninstall",
+    "status": "SKIP",
+    "duration": 0.0,
+    "error": "No installed plugin ID",
+    "output": ""
+  },
+  {
+    "id": "L12",
+    "name": "install broken plugin",
+    "status": "SKIP",
+    "duration": 0.0,
+    "error": "No tests/fixtures/broken-plugin fixture",
+    "output": ""
+  },
+  {
+    "id": "D2",
+    "name": "README.md summary",
+    "status": "PASS",
+    "duration": 8.36,
+    "error": "",
+    "output": "STDOUT:\n根据 README.md 的内容，以下是这个项目的 5 句话总结：\n\n1. **项目目标**：Pode-Agent 是 Kode-Agent 的 Python 1:1 重写版本，旨在为 Python 开发者提供一个终端原生的 AI 编程助手，降低贡献门槛并利用 Python 丰富的 AI/ML 生态。\n\n2. **技术栈**：项目采用 Python ≥3.11 运行时，使用 Typer 作为 CLI 框架、Pydantic v2 进行 Schema 验证、httpx 作为异步 HTTP 客户端、pytest 进行测试，终端 UI 使用 React + Ink v5 深度复刻原版。\n\n3. **核心功能**：支持 15+ 个 LLM Provider（Anthropic、OpenAI 等）、25+ 个内置工具（Bash、文件系统、Web 搜索、Jupyter 等）、MCP 协议、插件系统（Skill Marketplace）、权限管理和会话持久化。\n\n4. **当前进度**：Phase 0-5 已全部完成（包括 CLI 框架、多 Provider 支持、完整工具集、终端 UI、MCP、插件系统、Hook 系统、SubAgent 系统和 ACP 协议），已有 789+ 测试通过。\n\n5. **下一步计划**：Phase 6（6 个月以上）将进行 100% 功能对齐验证、性能优化、完整文档编写，并最终发布到 PyPI。\n\nSTDERR:\n"
+  },
+  {
+    "id": "D1",
+    "name": "project context awareness",
+    "status": "PASS",
+    "duration": 13.21,
+    "error": "",
+    "output": "STDOUT:\n根据项目文档，这个仓库是：\n\n**Pode-Agent** — 一个用 Python 重写的 AI 编码助手终端工具。\n\n具体事实：\n\n1. **项目定位**：Kode-Agent（TypeScript 版本）的 Python 1:1 重写版本，是一个终端原生的 AI 编程助手。\n\n2. **核心功能**：\n   - 支持 15+ 个 LLM Provider（Anthropic Claude、OpenAI GPT、Mistral、DeepSeek、Ollama 等）\n   - 25+ 个内置工具（Bash 命令执行、文件读写、Grep 搜索、Web 搜索、Jupyter 等）\n   - 权限管理系统（细粒度工具执行权限控制）\n   - 会话持久化（JSONL 格式日志）\n   - MCP 协议支持（客户端/服务端）\n   - 插件系统（Skill Marketplace）\n   - 终端 UI（React + Ink v5，通过 JSON-RPC 与 Python 后端通信）\n   - 计划模式（先规划后执行）\n   - SubAgent 系统（子代理执行）\n\n3. **技术栈**：\n   - Python ≥3.11\n   - CLI 框架：Typer\n   - 数据验证：Pydantic v2\n   - HTTP 客户端：httpx\n   - 终端 UI：React + Ink v5（TypeScript，独立 Bun 进程）\n\n4. **开发状态**：Phase 0-5 已完成（789+ 测试通过），目前处于 Phase 6（完善与发布阶段）。\n\n5. **安装方式**：目标是通过 `pip install pode-agent` 安装。\n\nSTDERR:\n"
+  },
+  {
+    "id": "D4",
+    "name": "plan-mode doc summary",
+    "status": "PASS",
+    "duration": 16.17,
+    "error": "",
+    "output": "STDOUT:\n根据 `docs/plan-mode.md` 文档，以下是 Plan Mode 的核心要点总结：\n\n## 📋 Plan Mode 总结\n\n### 🎯 目标\n\n**先规划，后执行**——在进行任何写操作（文件修改、代码执行等）之前，先通过只读探索生成一份人类可审查的计划，用户确认后再开始执行。\n\n核心解决的问题：避免 AI Agent 在没有充分理解情况下就开始修改文件，导致难以回滚的意外操作。\n\n**设计原则：**\n1. **只读探索阶段**：只能使用只读工具（文件读取、搜索、grep 等）\n2. **两种限制层次**：软约束（System prompt）+ 硬拒绝（PermissionEngine 直接拒绝非只读工具）\n3. **计划透明可审**：输出结构化计划供用户审查\n4. **边界清晰**：计划阶段和执行阶段有明确切换点\n5. **可恢复性**：计划持久化，重启后可继续推进\n\n---\n\n### 🚪 进入方式\n\n调用 **`EnterPlanModeTool`** 工具：\n\n```python\n# 输入\nEnterPlanModeInput(objective=\"重构 auth 模块\")\n\n# 副作用\n1. context.options.permission_mode = PermissionMode.PLAN\n2. 触发 System Prompt 重新构建（注入 Plan Mode 附加提示）\n3. UI 显示\"计划模式\"标识\n```\n\n进入后，Agent 只能使用只读工具进行探索，然后调用 `exit_plan_mode` 输出完整计划。\n\n---\n\n### 🚪 退出方式\n\n调用 **`ExitPlanModeTool`** 工具：\n\n```python\n# 输入\nExitPlanModeInput(plan=Plan(...))  # 包含目标、步骤、验收标准、风险等\n\n# 副作用\n1. context.options.permission_mode = PermissionMode.DEFAULT（重置为默认模式）\n2. SessionManager 检测并写入 `plan_created` JSONL 事件\n3. UI 显示结构化计划，等待用户批准/拒绝\n```\n\n用户批准后，进入执行阶段，按步骤推进任务。\n\n---\n\n### 💾"
+  },
+  {
+    "id": "D3",
+    "name": "dual doc comparison",
+    "status": "PASS",
+    "duration": 23.08,
+    "error": "",
+    "output": "STDOUT:\n根据对两个文档的阅读，我来总结它们在系统分层上的一致点和差异点：\n\n## 一致点\n\n### 1. 分层架构的核心理念\n两个文档都明确采用**分层架构**，遵循**严格的依赖方向**（低层不依赖高层）：\n- README.md 提到 \"完整保留原版所有功能\"\n- architecture.md 明确定义依赖方向：`infra ← core ← services ← tools ← app ← entrypoints`\n\n### 2. 七层架构模型\n两个文档都描述了相同的七层结构（从底到顶）：\n1. **Infrastructure Layer**（基础设施层）\n2. **Core Layer**（核心层）\n3. **Service Layer**（服务层）\n4. **Tools Layer**（工具层）\n5. **Application Layer**（应用层）\n6. **UI Layer**（界面层）\n7. **Entrypoints Layer**（入口层）\n\n### 3. 核心原则一致\n- **Core Layer 不依赖 UI**（可在无终端环境中运行）\n- **Application Layer 负责业务编排**\n- **Entrypoint Layer 仅负责启动和路由**（薄层）\n\n### 4. UI 与后端分离架构\n两个文档都描述了相同的双进程通信架构：\n- README.md：\"React + Ink v5 终端 UI（深度复刻 Kode-Agent）\"\n- architecture.md：UI 进程（Bun）和后端进程（Python）通过 **JSON-RPC over stdio** 双向通信\n\n### 5. 工具系统的定位\n两个文档都将 **Tools** 作为独立的一层，包含 25+ 个内置工具（Bash、文件系统、Web 搜索、Jupyter 等）\n\n---\n\n## 差异点\n\n### 1. 分层描述的详细程度\n\n| 维度 | README.md | architecture.md |\n|------|-----------|-----------------|\n| **架构图** | 无 | 有 ASCII 架构图展示七层 |\n| **每层职责** | 简要提及 | 详细说明每层的目录结构、约束、模块 |\n| **依赖规则*"
+  },
+  {
+    "id": "D5",
+    "name": "subagent context isolation",
+    "status": "PASS",
+    "duration": 14.19,
+    "error": "",
+    "output": "STDOUT:\n根据文档 `docs/subagent-system.md`，子代理（SubAgent）和主代理（Main Agent）的**上下文隔离机制**主要通过以下方式设计：\n\n## 核心隔离机制：ForkContext\n\n### 1. **独立的消息历史**\n\n每个 SubAgent 拥有完全独立的消息数组，与父 Agent 互不污染：\n\n```\nMain Agent messages: [msg1, msg2, msg3, ...]\n                          │\n                          ▼ TaskTool 调用\nSubAgent messages: [fork_context_messages..., prompt_messages...]\n```\n\n### 2. **ForkContext 的工作流程**\n\n当 Agent 配置中 `fork_context = True` 时：\n\n1. **从磁盘读取父消息**：从 JSONL 日志文件读取父 Agent 在 TaskTool 调用**之前**的所有历史消息\n2. **切片隔离**：只复制到 TaskTool 调用之前的消息，不包含当前工具调用\n3. **注入特殊提示**：添加一条特殊用户消息告诉子代理\"上面的消息只是背景上下文\"\n4. **只读隔离**：子代理的后续消息不会影响父代理的消息数组\n\n### 3. **消息数组结构**\n\n```python\nmessages_for_query = [\n    # ── fork_context_messages（父 Agent 历史，只读）──\n    {\"role\": \"user\", \"content\": \"帮我重构 auth 模块\"},\n    {\"role\": \"assistant\", \"content\": [...]},\n    {\"role\": \"user\", \"content\": [{\"tool_result\": ...}]},\n    ...\n    \n    # ── prompt_messages ──\n    {\"role\": \"assistant\", \"content\": [{\"tool_use\": Task(...)}]},  # TaskTool 调用\n    {\"rol"
+  },
+  {
+    "id": "D6",
+    "name": "skill/tool/command comparison",
+    "status": "PASS",
+    "duration": 14.06,
+    "error": "",
+    "output": "STDOUT:\n根据文档 `docs/skill-system.md`，我来对比 **Skill**、**Tool**、**Slash Command** 三者的定位：\n\n## 三者对比总结\n\n| 维度 | **Tool（工具）** | **Skill（技能）** | **Command（命令）** |\n|------|-----------------|------------------|---------------------|\n| **本质** | 程序化功能（代码实现） | 领域知识 + 指令模板（Prompt 工程） | 用户触发的自定义指令（Prompt 工程） |\n| **定义方式** | Python 代码，继承 `Tool` ABC | `SKILL.md` + YAML frontmatter | `*.md` + YAML frontmatter |\n| **调用方式** | LLM 通过 `tool_use` 直接执行 | LLM 通过 `SkillTool` **自动调用** | 用户通过 `/command-name` **手动触发** |\n| **放置目录** | `pode_agent/tools/` | `.pode/skills/` 或 `~/.pode/skills/` | `.pode/commands/` 或 `~/.pode/commands/` |\n| **isHidden** | — | `True`（对用户隐藏） | `False`（用户可见） |\n| **isSkill** | — | `True` | `False` |\n| **触发主体** | LLM 自主决定 | LLM 自主决定 | 用户主动输入 |\n| **展示对象** | LLM（通过工具列表） | LLM（通过 `SkillTool.prompt()`） | 用户（通过 REPL UI） |\n\n---\n\n## 核心差异\n\n### 1. **Tool vs Skill/Command**\n- **Tool** 是**可执行代码**，提供原子操作能力（如读写文件、执行 Bash、搜索等）\n- **Skill/Command** 是**Prompt 模板**，封装领域知识和工作流程，本身不可执行\n\n### 2. **Skill vs Command**"
+  },
+  {
+    "id": "D7",
+    "name": "read nonexistent doc",
+    "status": "PASS",
+    "duration": 6.38,
+    "error": "",
+    "output": "STDOUT:\n错误：文件不存在 - docs/not-exist.md\n\nSTDERR:\n"
+  },
+  {
+    "id": "D8",
+    "name": "risk assessment from context",
+    "status": "PASS",
+    "duration": 21.71,
+    "error": "",
+    "output": "STDOUT:\n基于对项目代码、文档和已知问题的分析，以下是**最值得优先测试的 5 个高风险功能点**：\n\n---\n\n### 1. **工具执行进度实时反馈 (UI-01)**\n**原因**：`query.py` 中工具 progress 事件被缓存到执行结束后才统一 yield，导致长耗时任务（Bash、文件处理、网络请求）在 UI 上显示为\"卡住思考\"而非\"正在执行\"，严重影响用户信任和可理解性。这是核心 Agentic Loop 与前端通信链路的关键缺陷。\n\n---\n\n### 2. **工具卡片参数显示 (UI-02)**\n**原因**：`TOOL_USE_START` 事件不携带真实 `tool_input`，导致 UI 渲染的工具卡片经常是空的（如 `bash()`、`file_read()` 无参数）。用户无法看到 Agent 正在操作哪个文件、执行什么命令，直接影响操作透明度和安全判断。\n\n---\n\n### 3. **Plan Mode 状态机完整性 (UI-03)**\n**原因**：文档宣称支持完整的计划生成→审批→步骤执行→完成/取消闭环，但后端 `PLAN_*` 事件未真正从 agent loop 中发出，UI 的 plan 状态消费端与后端生产端脱节。这是 Phase 5 核心功能，若状态机不完整会导致计划模式形同虚设。\n\n---\n\n### 4. **SubAgent 生命周期可见性 (UI-04)**\n**原因**：后端已发出 `sub_agent/started`、`sub_agent/progress`、`sub_agent/completed`、`sub_agent/failed` 事件，但前端 `useSession.ts` 未注册这些事件的处理器，导致子代理执行过程对用户完全不可见。TaskTool 是 SubAgent 系统的核心入口，此问题直接影响多代理协作功能的可用性。\n\n---\n\n### 5. **权限对话框工具名/字段名映射 (UI-06)**\n**原因**：前端权限组件使用 PascalCase 工具名（如 `Bash`、`FileEdit`），但后端实际工具名是 snake_case（`bash`、`file_edit`）；字段名也不一致（前端期望 `old_string/new_string`，后端实际是 `old"
+  },
+  {
+    "id": "E1",
+    "name": "top-level directory listing",
+    "status": "PASS",
+    "duration": 12.98,
+    "error": "",
+    "output": "STDOUT:\n根据仓库内容，以下是顶层目录及其职责：\n\n| 目录/文件 | 职责 |\n|-----------|------|\n| `pode_agent/` | Python 后端主包，包含完整的 Agent 实现（7 层架构：infra→core→services→tools→app→types→entrypoints） |\n| `src/ui/` | TypeScript 前端，基于 React + Ink v5 的终端 UI，通过 JSON-RPC 与后端通信 |\n| `docs/` | 设计文档集合（17 个文档），包括架构、工具系统、Plan Mode、SubAgent 等权威文档 |\n| `tests/` | 测试套件，包含单元测试、集成测试和 E2E 测试 |\n| `Kode-Agent/` | 原版 Kode-Agent 引用目录 |\n| `test-pode/` | 测试相关目录 |\n| `-p/`, `echo/`, `Directory created or exists/` | 临时测试目录 |\n| `pyproject.toml` | Python 项目配置（依赖、入口点等） |\n| `uv.lock` | 依赖锁定文件 |\n| `README.md` | 项目说明 |\n| `AGENTS.md` | Agent 使用说明 |\n| `CLAUDE.md` | Claude 使用说明 |\n| `E2E_*.py/txt/json/md` | E2E 测试生成的临时文件 |\n| `*.md` (其他) | 项目总结、测试报告等文档 |\n\nSTDERR:\n"
+  },
+  {
+    "id": "E2",
+    "name": "find Tool subclasses",
+    "status": "PASS",
+    "duration": 21.9,
+    "error": "",
+    "output": "STDOUT:\n根据搜索结果，我找到了所有定义了 Tool 子类的文件。让我按功能域进行分组：\n\n## Tool 子类文件按功能域分组\n\n### 📁 **Agent（代理相关）**\n| 文件路径 | Tool 类名 |\n|---------|----------|\n| `pode_agent/tools/agent/ls.py` | `LsTool` |\n| `pode_agent/tools/agent/plan_mode.py` | `EnterPlanModeTool`, `ExitPlanModeTool` |\n| `pode_agent/tools/agent/task.py` | `TaskTool` |\n\n### 🤖 **AI（人工智能相关）**\n| 文件路径 | Tool 类名 |\n|---------|----------|\n| `pode_agent/tools/ai/ask_expert.py` | `AskExpertModelTool` |\n| `pode_agent/tools/ai/skill.py` | `SkillTool` |\n\n### 📂 **Filesystem（文件系统相关）**\n| 文件路径 | Tool 类名 |\n|---------|----------|\n| `pode_agent/tools/filesystem/file_edit.py` | `FileEditTool` |\n| `pode_agent/tools/filesystem/file_read.py` | `FileReadTool` |\n| `pode_agent/tools/filesystem/file_write.py` | `FileWriteTool` |\n| `pode_agent/tools/filesystem/glob.py` | `GlobTool` |\n| `pode_agent/tools/filesystem/multi_edit.py` | `MultiEditTool` |\n| `pode_agent/tools/filesystem/notebook_edit.py` | `NotebookEditTool` |\n| `pode_agent/tools/filesystem/notebook_read.py` | `"
+  },
+  {
+    "id": "E4",
+    "name": "search TaskTool/TaskOutput",
+    "status": "PASS",
+    "duration": 37.49,
+    "error": "",
+    "output": "STDOUT:\n让我查看具体的实现文件：\n\n现在让我查看后台任务管理服务以了解完整的协作流程：\n\n现在我已经了解了完整的实现。让我总结 TaskTool 和 TaskOutputTool 的协作机制：\n\n## TaskTool 和 TaskOutputTool 实现位置及协作总结\n\n### 📁 实现位置\n\n| 工具 | 文件路径 | 职责 |\n|------|----------|------|\n| **TaskTool** | `pode_agent/tools/agent/task.py` | SubAgent 执行引擎 — 创建/执行/恢复子代理 |\n| **TaskOutputTool** | `pode_agent/tools/system/task_output.py` | 读取后台任务输出 |\n| **后台任务注册表** | `pode_agent/services/agents/background_tasks.py` | 跟踪后台 SubAgent 任务状态 |\n\n---\n\n### 🔄 协作流程\n\n#### 1️⃣ **前台执行模式** (`run_in_background=False`)\n```\n主 Agent → TaskTool.call() → 创建子 Session → query_core() 执行\n           ↓\n    实时返回进度 (ToolOutput type=\"progress\")\n           ↓\n    执行完成后返回结果 (ToolOutput type=\"result\")\n```\n- 同步阻塞执行\n- 不需要 TaskOutputTool\n\n---\n\n#### 2️⃣ **后台执行模式** (`run_in_background=True`)\n\n**步骤 1: TaskTool 启动后台任务**\n```python\n# task.py _run_background() 方法\n1. upsert_background_agent_task()  # 注册任务到内存注册表\n2. asyncio.create_task(_background_worker())  # 启动协程\n3. 立即返回 ToolOutput:\n   {\n     \"status\": \"async_launched\",\n    "
+  },
+  {
+    "id": "E5",
+    "name": "search marketplace CLI",
+    "status": "PASS",
+    "duration": 17.8,
+    "error": "",
+    "output": "STDOUT:\n根据搜索结果，我找到了所有 **plugin marketplace** 相关的 CLI 命令。以下是完整的命令列表：\n\n## Plugin Marketplace CLI 命令\n\n| 命令 | 用途 |\n|------|------|\n| `pode plugin marketplace add <source>` | 添加一个 marketplace 来源（支持 `github:owner/repo`、`file:./path` 等格式） |\n| `pode plugin marketplace remove <name>` | 移除一个已配置的 marketplace 来源 |\n| `pode plugin marketplace list` | 列出所有已知的 marketplace 来源 |\n| `pode plugin marketplace update <name>` | 更新指定 marketplace 的缓存（刷新插件列表） |\n\n### 命令详解\n\n1. **`pode plugin marketplace add <source>`**\n   - 参数：`source` - marketplace 来源（如 `github:owner/repo` 或 `file:./path`）\n   - 选项：`--name` - 覆盖 marketplace 名称；`--ref` - 指定 Git ref（默认 `main`）\n   - 用途：注册新的 marketplace 来源到 `~/.pode/plugins/known_marketplaces.json`\n\n2. **`pode plugin marketplace remove <name>`**\n   - 参数：`name` - 要移除的 marketplace 名称\n   - 用途：从已知 marketplace 列表中删除指定来源\n\n3. **`pode plugin marketplace list`**\n   - 用途：显示所有已配置的 marketplace 及其来源类型和 URL/路径\n\n4. **`pode plugin marketplace update <name>`**\n   - 参数：`name` - 要更新的 marketplace 名称\n   -"
+  },
+  {
+    "id": "E3",
+    "name": "search enter_plan_mode",
+    "status": "PASS",
+    "duration": 74.47,
+    "error": "",
+    "output": "STDOUT:\n我将帮你搜索 `enter_plan_mode` 的定义、调用链路和相关文档引用。\n\n让我读取关键文件来了解 `enter_plan_mode` 的完整定义和调用链路：\n\n现在让我查看调用链路相关的文件：\n\n现在让我查看一些相关的文档引用：\n\n现在我已经收集了足够的信息。让我为你整理一份关于 `enter_plan_mode` 的完整搜索结果报告：\n\n## `enter_plan_mode` 搜索结果报告\n\n---\n\n### 一、定义位置\n\n#### 1. **Pode-Agent (Python 实现)**\n\n**文件**: `pode_agent/tools/agent/plan_mode.py`\n\n```python\nclass EnterPlanModeTool(Tool):\n    \"\"\"Switch the agent into plan mode for read-only exploration.\"\"\"\n    \n    name: str = \"enter_plan_mode\"\n    description: str = (\n        \"Switch the agent into plan mode for read-only exploration. \"\n        \"In plan mode, the agent investigates the codebase without making changes \"\n        \"and produces a structured execution plan.\"\n    )\n    \n    def input_schema(self) -> type[BaseModel]:\n        return EnterPlanModeInput  # 包含 objective 字段\n    \n    def is_read_only(self, input: Any = None) -> bool:\n        return True  # 只读工具\n    \n    def needs_permissions(self, input: Any = None) -> bool:\n        return False  # 无需权限确认\n    \n    de"
+  },
+  {
+    "id": "E6",
+    "name": "search @mention handling",
+    "status": "PASS",
+    "duration": 60.46,
+    "error": "",
+    "output": "STDOUT:\n现在让我查看 Python 端的实现（pode_agent）：\n\n根据我的搜索结果，我现在可以总结所有处理 mention 的实现和文档说明。让我整理一份完整的总结：\n\n## @ Mention 系统实现和文档总结\n\n### 一、实现位置\n\n#### 1. **Kode-Agent (TypeScript/前端)**\n\n**核心实现文件：**\n- `Kode-Agent\\src\\services\\context\\mentionProcessor.ts` - 主要处理逻辑\n- `Kode-Agent\\src\\utils\\completion\\mentionSuggestions.ts` - 智能补全建议\n- `Kode-Agent\\src\\services\\system\\systemReminder.ts` - 事件监听和提醒生成\n- `Kode-Agent\\src\\utils\\messages\\userInput.tsx` - 用户输入处理入口\n\n#### 2. **Pode-Agent (Python/后端)**\n\n**文档中定义但未找到完整实现：**\n- 文档提到 `pode_agent/services/context/mentions.py`，但实际项目中未找到该文件\n- `pode_agent\\app\\query.py` 中当前实现较简单，未包含完整的 @mention 处理逻辑\n\n### 二、支持的语法\n\n根据 `Kode-Agent\\docs\\mention-system.md` 和代码实现，系统支持以下 **3 种 mention 类型**：\n\n#### 1. **🦜 专家模型咨询 (`@ask-model-name`)**\n\n**语法格式：**\n```bash\n@ask-{模型名称}\n```\n\n**正则模式：** `/@(ask-[\\w\\-]+)/g`\n\n**示例：**\n```bash\n@ask-claude-sonnet-4 如何优化这个 React 组件？\n@ask-gpt-5 这个 API 设计有什么安全隐患？\n@ask-o1-preview 分析这个算法的时间复杂度\n```\n\n**行为：**\n- 触发 `AskExpertModelTool`\n- 模型仅接收问题（无对话历史）\n- 适用于获取不同模型的独立观点\n\n#### 2"
+  },
+  {
+    "id": "E7",
+    "name": "testing strategy gap analysis",
+    "status": "PASS",
+    "duration": 77.7,
+    "error": "",
+    "output": "STDOUT:\n现在让我进一步查看代码目录结构，了解各个工具的实现情况：\n\n现在我已经有了足够的信息来进行对比分析。让我总结 E2E 测试策略文档与当前代码实现的对比情况：\n\n## 对比分析：docs/testing-strategy.md 与当前代码目录\n\n根据对 `docs/testing-strategy.md` 文档和当前代码目录的分析，以下是 **E2E 场景已有明显实现基础** 的总结：\n\n---\n\n### ✅ 已有明显实现基础的 E2E 场景\n\n#### 1. **CLI 基础能力 (A 组)**\n| 场景 | 实现基础 |\n|------|----------|\n| `pode --version` | ✅ `test_a1_version` - 使用 subprocess 调用 CLI |\n| `pode --help` | ✅ `test_a2_help` |\n| `pode (no TTY)` | ✅ `test_a3_repl_no_tty` |\n| `pode -p` (print mode) | ✅ `test_a4_print_mode` + `tests/unit/app/test_query.py` |\n| `--output-format text/json` | ✅ `test_a5_text_format`, `test_a6_json_format` |\n| `--verbose` | ✅ `test_a7_verbose` |\n| `--safe` (safe mode) | ✅ `test_a8_safe_mode` |\n\n**支撑代码**：\n- `tests/e2e/e2e_runner.py` - 完整的 E2E 测试脚本（1300+ 行）\n- `tests/unit/entrypoints/test_cli_print.py` - CLI print mode 单元测试\n- `pode_agent/entrypoints/cli.py` - CLI 入口\n\n---\n\n#### 2. **配置与模型路由 (B 组)**\n| 场景 | 实现基础 |\n|------|----------|\n| `pode config list/get/set` | ✅ `test_b1` ~ `test_b8` - 完整的 confi"
+  },
+  {
+    "id": "E8",
+    "name": "REPL input handling",
+    "status": "PASS",
+    "duration": 61.7,
+    "error": "",
+    "output": "STDOUT:\n现在让我查看 SessionManager 来处理输入的核心逻辑：\n\n现在让我查看 query 模块来了解完整的输入处理流程：\n\n现在我已经完整了解了 REPL 输入处理的流程。让我整理一下相关信息并给用户一个清晰的说明。\n\n现在我已经完整了解了 REPL 输入处理的架构。让我给用户提供一个清晰的说明。\n\n## REPL 输入处理相关文件定位及处理流程说明\n\n根据代码分析，Pode-Agent 的 REPL 输入处理涉及以下核心文件：\n\n### 📁 核心文件定位\n\n| 文件路径 | 职责 |\n|---------|------|\n| `pode_agent/entrypoints/cli.py` | CLI 入口，启动 REPL 模式 |\n| `pode_agent/entrypoints/ui_bridge.py` | JSON-RPC 桥接层，连接 UI 和 SessionManager |\n| `pode_agent/app/session.py` | SessionManager，会话状态管理和事件编排 |\n| `pode_agent/app/query.py` | Agentic Loop 核心引擎，处理输入并执行工具 |\n| `src/ui/src/screens/REPL.tsx` | React Ink UI，用户输入界面 |\n| `src/ui/src/hooks/useSession.ts` | UI 会话钩子，处理 JSON-RPC 通信 |\n\n---\n\n### 🔄 输入事件集中处理流程\n\n```\n┌─────────────────────────────────────────────────────────────────────────┐\n│                         REPL 输入处理架构                                │\n└─────────────────────────────────────────────────────────────────────────┘\n\n  ┌──────────────┐     ┌──────────────┐     ┌──────────────┐\n  │  Bun Ink UI  │────▶│  UIBridge  "
+  },
+  {
+    "id": "H1",
+    "name": "web fetch example.com",
+    "status": "PASS",
+    "duration": 12.04,
+    "error": "",
+    "output": "STDOUT:\n我遇到了 SSL 证书验证问题，无法直接抓取该网站。不过，`example.com` 是一个众所周知的示例域名，由 IANA（互联网号码分配机构）保留用于文档和示例中。\n\n**页面主旨总结（中文）：**\n\n`example.com` 是一个专门保留用于示例和测试的域名。它通常用于：\n\n1. **文档示例**：在技术文档、教程和代码示例中作为占位符域名使用\n2. **测试用途**：开发人员可以在不访问真实网站的情况下测试网络相关功能\n3. **教育目的**：用于说明域名结构、URL 格式等概念\n\n该网站本身内容非常简单，主要目的是告诉访问者这是一个示例域名，不应被用于实际的生产环境或真实业务。\n\n如果您需要我抓取其他实际网站的内容进行总结，请提供具体的 URL。\n\nSTDERR:\n"
+  },
+  {
+    "id": "H2",
+    "name": "web search Python 3.13",
+    "status": "PASS",
+    "duration": 17.11,
+    "error": "",
+    "output": "STDOUT:\n根据 Python 3.13 官方发布说明，最重要的 3 点总结如下：\n\n## Python 3.13 最重要的 3 个新特性\n\n### 1. **全新的交互式解释器**\n- 基于 PyPy 项目的代码，提供更现代化的 REPL 体验\n- 支持多行编辑并保留历史记录\n- 直接支持 `help`、`exit`、`quit` 等命令（无需括号）\n- 默认启用彩色提示和 traceback\n- 支持 F1（帮助浏览）、F2（历史浏览）、F3（粘贴模式）等快捷键\n\n### 2. **实验性无 GIL 模式（Free-threaded CPython）**\n- 支持禁用全局解释器锁（GIL）运行（PEP 703）\n- 允许线程在多核 CPU 上真正并行执行\n- 需要专门的构建版本（如 `python3.13t`）\n- 目前仍是实验性功能，单线程性能有一定损失\n\n### 3. **实验性即时编译器（JIT Compiler）**\n- 添加了基本的 JIT 编译器支持（PEP 744）\n- 默认禁用，但可在未来版本中启用\n- 目前性能提升有限，预计后续版本会持续改进\n\n---\n\n**其他值得注意的改进**：\n- 错误信息更友好（如检测到脚本与标准库模块重名时会给出提示）\n- Traceback 默认彩色显示\n- 移除了 19 个过时的标准库模块（PEP 594）\n- iOS 和 Android 成为官方支持的平台（tier 3）\n\nSTDERR:\n"
+  },
+  {
+    "id": "H3",
+    "name": "web search prompt caching",
+    "status": "PASS",
+    "duration": 31.57,
+    "error": "",
+    "output": "STDOUT:\n网页内容主要是 HTML 结构，让我尝试获取更具体的文档内容。让我查看 GitHub 上的 cookbook 示例来获取更详细的信息。\n\n我已经获取了 Anthropic Prompt Caching 的详细文档。让我为您总结一下关键信息，并分析是否适合您的项目。\n\n## Anthropic Prompt Caching 文档摘要\n\n### 核心功能\nPrompt Caching 允许您存储和重用提示中的上下文内容，可以：\n- **降低延迟超过 2 倍**\n- **节省高达 90% 的成本**（针对重复性任务）\n\n### 两种启用方式\n\n1. **自动缓存（推荐）**\n   - 只需在请求顶层添加 `cache_control={\"type\": \"ephemeral\"}`\n   - 系统自动管理缓存断点\n   - 多轮对话中缓存断点会自动向前移动\n\n2. **显式缓存断点**\n   - 在单个内容块上放置 `cache_control`\n   - 适合需要细粒度控制的场景\n   - 最多支持 4 个独立断点\n\n### 关键参数\n\n| 参数 | 说明 |\n|------|------|\n| **最小缓存长度** | Sonnet: 1,024 tokens；Opus/Haiku: 4,096 tokens |\n| **缓存 TTL** | 默认 5 分钟（每次命中刷新），可选 1 小时（2 倍基础价格） |\n| **缓存写入价格** | 1.25x 基础输入价格 |\n| **缓存读取价格** | 0.1x 基础输入价格（节省 90%） |\n\n### 适用场景\n- 重复使用大量上下文（如文档、代码库、书籍）\n- 多轮对话系统\n- 需要多次查询相同内容的场景\n\n---\n\n## 是否适合您的项目？\n\n为了给出更准确的建议，我需要了解您的项目情况：\n\n1. **您的项目使用 Claude API 吗？**\n2. **是否有重复发送大量相同上下文的场景？**（如分析长文档、代码库、多轮对话）\n3. **每次请求的 token 数量大概是多少？**（需要超过 1,024 tokens 才能受益于缓存）\n\n如果您能提供项目目录结构或使用场景的描述，我可以更具体地分析是否适合集成 Prompt Caching 功能。\n\nSTDERR:\n"
+  },
+  {
+    "id": "H4",
+    "name": "notebook read",
+    "status": "SKIP",
+    "duration": 0.0,
+    "error": "No test notebook fixture",
+    "output": ""
+  },
+  {
+    "id": "H5",
+    "name": "notebook edit",
+    "status": "SKIP",
+    "duration": 0.0,
+    "error": "No test notebook fixture",
+    "output": ""
+  },
+  {
+    "id": "H6",
+    "name": "corrupted notebook",
+    "status": "SKIP",
+    "duration": 0.0,
+    "error": "No test notebook fixture",
+    "output": ""
+  },
+  {
+    "id": "Q1",
+    "name": "pode print mode simple",
+    "status": "PASS",
+    "duration": 3.05,
+    "error": "",
+    "output": "STDOUT:\nOK\n\nSTDERR:\n"
+  },
+  {
+    "id": "Q2",
+    "name": "pode --output-format text",
+    "status": "PASS",
+    "duration": 3.06,
+    "error": "",
+    "output": "STDOUT:\ntext format ok\n\nSTDERR:\n"
+  },
+  {
+    "id": "Q3",
+    "name": "pode --output-format json",
+    "status": "PASS",
+    "duration": 3.22,
+    "error": "",
+    "output": "STDOUT:\n{\n  \"text\": \"status=ok, mode=print\",\n  \"cost_usd\": 0.0,\n  \"model\": \"qwen3.5-plus\"\n}\n\nSTDERR:\n"
+  },
+  {
+    "id": "Q4",
+    "name": "pode --safe print mode",
+    "status": "PASS",
+    "duration": 3.35,
+    "error": "",
+    "output": "STDOUT:\nsafe mode ok\n\nSTDERR:\n"
+  },
+  {
+    "id": "Q5",
+    "name": "pode --verbose print mode",
+    "status": "PASS",
+    "duration": 3.5,
+    "error": "",
+    "output": "STDOUT:\nverbose ok\n\nSTDERR:\n"
+  },
+  {
+    "id": "T1",
+    "name": "assert: ok",
+    "status": "PASS",
+    "duration": 5.09,
+    "error": "",
+    "output": "STDOUT:\nok\n\nSTDERR:\n"
+  },
+  {
+    "id": "T2",
+    "name": "assert: json",
+    "status": "PASS",
+    "duration": 5.39,
+    "error": "",
+    "output": "STDOUT:\n{\"status\":\"ok\"}\n\nSTDERR:\n"
+  },
+  {
+    "id": "T3",
+    "name": "assert: repo name",
+    "status": "PASS",
+    "duration": 6.74,
+    "error": "",
+    "output": "STDOUT:\ntestbed\n\nSTDERR:\n"
+  },
+  {
+    "id": "T4",
+    "name": "assert: dirname",
+    "status": "PASS",
+    "duration": 9.87,
+    "error": "",
+    "output": "STDOUT:\nworkspace\n\nSTDERR:\n"
+  },
+  {
+    "id": "T6",
+    "name": "assert: theme config",
+    "status": "PASS",
+    "duration": 0.78,
+    "error": "",
+    "output": "light"
+  },
+  {
+    "id": "T7",
+    "name": "assert: safe mode status",
+    "status": "PASS",
+    "duration": 4.72,
+    "error": "",
+    "output": "STDOUT:\n否\n\nSTDERR:\n"
+  },
+  {
+    "id": "T5",
+    "name": "assert: md file count",
+    "status": "PASS",
+    "duration": 9.55,
+    "error": "",
+    "output": "STDOUT:\n17\n\nSTDERR:\n"
+  },
+  {
+    "id": "T8",
+    "name": "assert: plugin detection",
+    "status": "PASS",
+    "duration": 5.87,
+    "error": "",
+    "output": "STDOUT:\n是\n\nSTDERR:\n"
+  },
+  {
+    "id": "T9",
+    "name": "assert: MCP detection",
+    "status": "PASS",
+    "duration": 6.07,
+    "error": "",
+    "output": "STDOUT:\n否\n\nSTDERR:\n"
+  },
+  {
+    "id": "T10",
+    "name": "assert: background task",
+    "status": "PASS",
+    "duration": 4.47,
+    "error": "",
+    "output": "STDOUT:\n否\n\nSTDERR:\n"
+  },
+  {
+    "id": "T12",
+    "name": "assert: MCP roundtrip check",
+    "status": "PASS",
+    "duration": 4.07,
+    "error": "",
+    "output": "STDOUT:\n否\n\nSTDERR:\n"
+  },
+  {
+    "id": "T11",
+    "name": "assert: MCP transport status",
+    "status": "PASS",
+    "duration": 15.91,
+    "error": "",
+    "output": "STDOUT:\n没有配置。\n\nSTDERR:\n"
+  },
+  {
+    "id": "F1",
+    "name": "git status (read-only bash)",
+    "status": "PASS",
+    "duration": 7.67,
+    "error": "",
+    "output": "STDOUT:\n当前仓库的 git 状态摘要如下：\n\n- **当前分支**: `main`\n- **分支状态**: 本地分支领先 `origin/main` 5 个提交（可以使用 `git push` 推送）\n\n**未暂存的修改** (10 个文件):\n- 修改: `.claude/settings.local.json`, `README.md`\n- 删除: `docs/IMPROVEMENTS.md`\n- 修改: `pode_agent/` 目录下的多个文件 (cli.py, anthropic.py, openai.py, marketplace.py, task.py, grep.py)\n\n**未跟踪的文件** (多个新文件):\n- 包括一些 E2E 测试临时文件、文档文件 (`E2E_*.md`, `IMPLEMENTATION_SUMMARY.md` 等)\n- 新增目录: `test-pode/`, `tests/e2e/`, `tests/unit/services/plugins/`\n\n目前没有暂存任何更改。\n\nSTDERR:\n"
+  },
+  {
+    "id": "F2",
+    "name": "list docs/*.md (bash)",
+    "status": "PASS",
+    "duration": 9.88,
+    "error": "",
+    "output": "STDOUT:\n看起来系统可能是 Windows 环境。让我尝试使用不同的命令：\n\ndocs 目录下共有 17 个 Markdown 文件：\n\n1. agent-loop.md\n2. api-specs.md\n3. architecture.md\n4. bugfix-ui-input.md\n5. data-flows.md\n6. e2e-test-prompt-for-agent.md\n7. e2e-test-prompts.md\n8. e2e-test-result.md\n9. modules.md\n10. need2fix.md\n11. phases.md\n12. plan-mode.md\n13. skill-system.md\n14. subagent-system.md\n15. tech-stack.md\n16. testing-strategy.md\n17. tools-system.md\n\nSTDERR:\n"
+  },
+  {
+    "id": "F3",
+    "name": "create E2E_WRITE_TEST.txt",
+    "status": "PASS",
+    "duration": 8.86,
+    "error": "",
+    "output": "STDOUT:\n已成功在当前目录创建文件 `E2E_WRITE_TEST.txt`，内容为 \"first line\"。\n\nSTDERR:\n"
+  },
+  {
+    "id": "F4",
+    "name": "edit E2E_WRITE_TEST.txt",
+    "status": "PASS",
+    "duration": 8.14,
+    "error": "",
+    "output": "STDOUT:\n已完成修改。\n\n**我做了什么：**\n- 读取了 `E2E_WRITE_TEST.txt` 文件，原内容为 `first line`\n- 将文件内容修改为 `second line`\n- 文件已成功更新\n\nSTDERR:\n"
+  },
+  {
+    "id": "F5",
+    "name": "create + multi-edit",
+    "status": "PASS",
+    "duration": 12.01,
+    "error": "",
+    "output": "STDOUT:\n我来帮你完成这个任务。首先创建文件并写入 3 行内容，然后使用 multi_edit 将每行的第一个词替换为大写。\n\n现在使用 multi_edit 将每行的第一个词替换为大写：\n\n让我验证一下文件内容：\n\n完成！我已经：\n\n1. 创建了 `E2E_MULTI_EDIT.txt` 文件，写入了 3 行不同内容\n2. 使用 `multi_edit` 工具将每行的第一个词替换为大写：\n   - `hello` → `HELLO`\n   - `python` → `PYTHON`\n   - `multi` → `MULTI`\n\n文件现在的内容是：\n```\nHELLO world this is line one\nPYTHON programming is awesome\nMULTI edit feature works great\n```\n\nSTDERR:\n"
+  },
+  {
+    "id": "F6",
+    "name": "read nonexistent file",
+    "status": "PASS",
+    "duration": 5.13,
+    "error": "",
+    "output": "STDOUT:\nError: File not found: ./missing/none.py\n\nSTDERR:\n"
+  },
+  {
+    "id": "F7",
+    "name": "failing bash command",
+    "status": "PASS",
+    "duration": 21.6,
+    "error": "",
+    "output": "STDOUT:\n看起来这个环境是 Windows 系统（从错误信息的编码可以看出是中文 Windows 的提示）。让我用更合适的方式来测试：\n\n让我用更清晰的方式来分别捕获 stdout 和 stderr：\n\n根据执行结果，我来总结这个失败命令的输出：\n\n## 命令执行结果总结\n\n**执行的命令：** `ls /nonexistent_dir_xyz`\n\n### 📤 STDOUT（标准输出）\n```\n（空）\n```\n标准输出为空，因为命令执行失败，没有正常输出。\n\n### 📥 STDERR（标准错误）\n```\n'ls' 不是内部或外部命令，也不是可运行的程序\n或批处理文件。\n```\n（注：原始输出是乱码的中文，这是 Windows 系统提示 `ls` 命令不存在）\n\n### 🔢 EXIT CODE（退出码）\n```\n1\n```\n退出码为 **1**，表示命令执行失败（非零值通常表示错误）。\n\n---\n\n**总结：** 该命令失败了，原因是这是一个 Windows 环境，没有 `ls` 命令（这是 Linux/Unix 命令）。错误信息通过 stderr 输出，退出码为 1 表示失败。\n\nSTDERR:\n"
+  },
+  {
+    "id": "F8",
+    "name": "mkdir + ls",
+    "status": "PASS",
+    "duration": 11.95,
+    "error": "",
+    "output": "STDOUT:\n看起来系统使用的是 Windows 命令。让我尝试使用 Windows 命令：\n\n目录已成功创建。以下是 `./tmp-e2e-output` 目录的内容：\n\n```\n2026/04/04  14:19    <DIR>          .\n2026/04/04  14:19    <DIR>          ..\n```\n\n目录目前是空的，只包含 `.`（当前目录）和 `..`（父目录）这两个默认条目。\n\nSTDERR:\n"
+  },
+  {
+    "id": "F9",
+    "name": "rmdir cleanup",
+    "status": "PASS",
+    "duration": 9.92,
+    "error": "",
+    "output": "STDOUT:\n已成功删除 `./tmp-e2e-output` 目录。\n\nSTDERR:\n"
+  },
+  {
+    "id": "F10",
+    "name": "safe mode write blocked",
+    "status": "PASS",
+    "duration": 12.59,
+    "error": "",
+    "output": "STDOUT:\n我理解您的请求。让我先尝试在当前的安全模式下创建文件 `E2E_SAFE_TEST.txt`，看看会发生什么。\n\n文件创建成功了！让我验证一下文件内容：\n\n## 结果说明\n\n我成功创建了文件 `E2E_SAFE_TEST.txt`，文件内容为：\"这是一个测试文件，用于验证安全模式的限制。\"\n\n### 关于\"安全模式\"的解释\n\n您提到的\"安全模式\"可能是指某些 AI 助手或系统中的限制模式。但在当前的环境中：\n\n1. **当前环境并非严格的安全模式**：我能够正常执行文件读写操作，说明当前的 Agent 环境具有文件系统访问权限。\n\n2. **真正的安全模式限制**：如果是在严格的安全模式下，通常会有以下限制：\n   - 禁止文件写入操作\n   - 禁止执行系统命令\n   - 禁止网络访问\n   - 只能进行只读操作\n\n3. **为什么您认为不能直接执行**：如果您之前遇到过无法执行某些操作的情况，可能是因为：\n   - 某些特定的工具被禁用\n   - 特定目录没有写入权限\n   - 系统策略限制了某些操作\n\n在当前环境下，文件操作、命令执行等功能都是可用的。如果您需要了解特定安全模式下的限制，或者想测试某些受限操作，请告诉我具体想测试什么功能。\n\nSTDERR:\n"
+  },
+  {
+    "id": "G1",
+    "name": "create function in temp file",
+    "status": "PASS",
+    "duration": 5.88,
+    "error": "",
+    "output": "STDOUT:\n文件中已经存在 `hello_world` 函数了。该函数已经实现了打印 \"Hello, World!\" 的功能，无需再做任何改动。\n\n```python\ndef hello_world():\n    print(\"Hello, World!\")\n```\n\n这个函数已经存在并且功能完整。如果您需要修改它或有其他需求，请告诉我。\n\nSTDERR:\n"
+  },
+  {
+    "id": "G2",
+    "name": "rename function + update refs",
+    "status": "PASS",
+    "duration": 9.53,
+    "error": "",
+    "output": "STDOUT:\n文件 `E2E_TEMP_G2.py` 已经包含了 `run_main()` 函数，内容为 `print('hello')`，并且在 `if __name__ == '__main__':` 块中正确调用了它。\n\n看起来这个文件已经处于您想要的状态：\n- 有一个名为 `run_main` 的函数\n- 函数内容是 `print('hello')`\n- 主程序入口正确调用了 `run_main()`\n\n如果您原本是想让我先添加 `main()` 函数然后再重命名为 `run_main`，那么当前文件已经完成了这个目标。文件已经是正确的状态了。\n\nSTDERR:\n"
+  },
+  {
+    "id": "G3",
+    "name": "reorder imports",
+    "status": "PASS",
+    "duration": 17.03,
+    "error": "",
+    "output": "STDOUT:\n我先在文件中写入乱序的 import 代码，然后再重排它们。\n\n现在我已经写入了乱序的 import 代码。接下来我将按照 Python 的标准规范重排 import 顺序：\n1. 标准库（按字母顺序）\n2. 第三方库（按字母顺序）\n3. 本地模块（按字母顺序）\n\n完成！我已经：\n\n1. **先写入乱序的 import** - 将标准库（`os`, `json`, `sys`, `re`, `collections`, `typing`）、第三方库（`requests`, `numpy`, `pandas`）和本地模块（`mymodule.utils`, `.local_module`）混合在一起。\n\n2. **然后重排为规范顺序**：\n   - **标准库**（字母顺序）：`json`, `os`, `re`, `sys`, `collections`, `typing`\n   - **第三方库**（字母顺序）：`numpy`, `pandas`, `requests`\n   - **本地模块**（字母顺序）：`.local_module`, `mymodule.utils`\n\n每组之间用空行分隔，符合 PEP 8 和 isort 的规范，且没有改变任何代码逻辑。\n\nSTDERR:\n"
+  },
+  {
+    "id": "G4",
+    "name": "split long function",
+    "status": "PASS",
+    "duration": 55.33,
+    "error": "",
+    "output": "STDOUT:\n现在我将按照要求：\n1. 首先写一个包含至少 30 行的单一函数\n2. 然后把它拆成两个小函数\n3. 解释拆分依据\n\n让我先创建一个包含至少 30 行的单一函数：\n\n我已经完成了任务。让我总结一下：\n\n## 任务完成情况\n\n### 1. 创建了一个包含至少 30 行的单一函数\n\n我创建了 `analyze_customer_behavior_and_generate_recommendations` 函数（约 90 行），它同时做了两件事：\n- **分析客户行为**：计算购买频率、偏好品类、消费水平等\n- **生成产品推荐**：基于分析结果生成个性化推荐\n\n### 2. 拆分成两个小函数\n\n我将这个长函数拆分成了两个职责单一的函数：\n\n| 函数名 | 行数 | 职责 |\n|--------|------|------|\n| `analyze_customer_behavior` | ~45 行 | 仅负责分析客户行为数据 |\n| `generate_product_recommendations` | ~40 行 | 仅负责根据统计数据生成推荐 |\n\n### 3. 拆分依据（单一职责原则）\n\n**拆分理由：**\n\n1. **单一职责原则 (SRP)**：原函数同时承担了两个不同的职责——\"分析\"和\"推荐\"。拆分后每个函数只做一件事。\n\n2. **可测试性**：拆分后可以独立测试：\n   - 可以单独测试 `analyze_customer_behavior` 是否正确计算统计数据\n   - 可以单独测试 `generate_product_recommendations` 是否基于给定数据正确生成推荐\n\n3. **可复用性**：\n   - `analyze_customer_behavior` 可以被其他需要客户分析但不需要推荐的场景复用\n   - `generate_product_recommendations` 可以接受不同来源的统计数据（如从数据库加载的历史数据）\n\n4. **可维护性**：如果推荐算法需要调整，只需修改 `generate_product_recommendations`，不影响分析逻辑。\n\n5. **清晰的依赖关系**：重构后的主函数 `analyze_customer_behavior_and_generate_reco"
+  },
+  {
+    "id": "G5",
+    "name": "fix syntax error only",
+    "status": "PASS",
+    "duration": 16.72,
+    "error": "",
+    "output": "STDOUT:\n我先在文件中添加一个有语法错误的函数（缺少冒号）：\n\n现在文件中有一个语法错误的函数（`def syntax_error_func(x)` 后面缺少冒号）。让我验证一下语法错误：\n\n确认有语法错误。现在只修复这个语法错误（添加冒号），不做任何风格清理：\n\n完成。我在 `E2E_TEMP_G5.py` 中：\n\n1. **添加了有语法错误的函数**：`def syntax_error_func(x)` 缺少了冒号\n2. **只修复了语法错误**：在 `x)` 后面添加了冒号 `:`，没有做任何其他风格上的修改\n\n语法检查已通过，文件现在是有效的 Python 代码。\n\nSTDERR:\n"
+  },
+  {
+    "id": "G6",
+    "name": "JSON structured edit",
+    "status": "PASS",
+    "duration": 6.01,
+    "error": "",
+    "output": "STDOUT:\n文件 `E2E_TEMP_G6.json` 中已经包含了您要求的内容：`{\"name\":\"test\",\"e2e\":true}`。\n\n该文件已经：\n1. 创建了 JSON 对象 `{\"name\":\"test\"}`\n2. 新增了字段 `e2e=true`\n\n无需进行任何修改，文件已符合您的要求。\n\nSTDERR:\n"
+  },
+  {
+    "id": "G7",
+    "name": "Markdown append section",
+    "status": "PASS",
+    "duration": 7.3,
+    "error": "",
+    "output": "STDOUT:\n文件已存在，我将在末尾追加一节 \"E2E Notes\"：\n\n已完成！我在 `E2E_TEMP_G7.md` 文件末尾追加了一节 \"E2E Notes\"。\n\nSTDERR:\n"
+  },
+  {
+    "id": "G8",
+    "name": "dry-run predict changes",
+    "status": "PASS",
+    "duration": 10.73,
+    "error": "",
+    "output": "STDOUT:\n## 计划：创建文件 `E2E_DRY_RUN.txt`\n\n如果我执行这个任务，我的计划非常简单：\n\n### 操作步骤\n\n| 步骤 | 操作 | 涉及文件 |\n|------|------|----------|\n| 1 | 使用 `file_write` 工具创建新文件 | **仅创建** `E2E_DRY_RUN.txt` |\n\n### 会修改的文件\n\n**答案：不会修改任何现有文件。**\n\n创建新文件 `E2E_DRY_RUN.txt` 是一个独立操作，只需要调用一次 `file_write` 工具，指定：\n- `file_path`: `./E2E_DRY_RUN.txt`\n- `content`: 文件内容（需要你指定）\n\n### 不会影响的其他文件\n\n当前目录中的所有现有文件（如 `README.md`、`pyproject.toml`、`src/` 目录等）都不会被修改。\n\n---\n\n**你想让我真正创建这个文件吗？** 如果是，请告诉我文件应该包含什么内容。\n\nSTDERR:\n"
+  },
+  {
+    "id": "I2",
+    "name": "ask_user follow-up",
+    "status": "SKIP",
+    "duration": 0.0,
+    "error": "Multi-turn: requires I1 session context",
+    "output": ""
+  },
+  {
+    "id": "I1",
+    "name": "ask_user in print mode",
+    "status": "PASS",
+    "duration": 7.72,
+    "error": "",
+    "output": "STDOUT:\n我已准备好为您生成发布说明！请告诉我：\n\n1. **版本号**是多少？（例如：v1.0.0, v2.3.1 等）\n2. **目标受众**是谁？（例如：开发者、最终用户、企业内部团队、客户等）\n\n收到这些信息后，我就可以为您生成一份专业的发布说明了。\n\nSTDERR:\n"
+  },
+  {
+    "id": "I4",
+    "name": "todo_write reorder",
+    "status": "PASS",
+    "duration": 14.72,
+    "error": "",
+    "output": "STDOUT:\n我目前没有看到现有的待办列表，让我先创建一个示例待办列表，然后按优先级重新排序。\n\n现在让我按优先级重新排序待办列表，将最重要的任务放在最前面：\n\n已完成待办列表的重新排序！按照优先级从高到低排列：\n\n1. **修复紧急bug** - 最高优先级（紧急问题需要立即处理）\n2. **回复客户邮件** - 高优先级（正在进行中，客户沟通很重要）\n3. **完成项目报告** - 中等优先级\n4. **准备下周会议材料** - 中等优先级\n5. **更新文档** - 较低优先级\n\n如果您有具体的待办事项需要我帮您排序，请告诉我您的任务列表，我可以根据您指定的优先级重新排列。\n\nSTDERR:\n"
+  },
+  {
+    "id": "I5",
+    "name": "todo_write mark completed",
+    "status": "PASS",
+    "duration": 9.97,
+    "error": "",
+    "output": "STDOUT:\n我需要先创建一个示例待办列表，然后标记一些项目为已完成。让我来做这个：\n\n我已经创建了一个示例待办列表，并标记了已完成的项目。\n\n**已完成的项目（2项）：**\n- ✅ 完成项目需求分析\n- ✅ 设计数据库架构\n\n**还剩下的项目（4项）：**\n- 🔄 实现用户认证模块（进行中）\n- ⏳ 编写API文档（待办）\n- ⏳ 进行单元测试（待办）\n- ⏳ 部署到生产环境（待办）\n\n总结：总共6项任务，已完成2项，还有4项待完成（其中1项正在进行中，3项尚未开始）。\n\nSTDERR:\n"
+  },
+  {
+    "id": "I3",
+    "name": "todo_write create + execute",
+    "status": "PASS",
+    "duration": 36.7,
+    "error": "",
+    "output": "STDOUT:\n## 架构摘要\n\n### 1. 项目概述\n**Pode-Agent** 是 Kode-Agent 的 Python 1:1 重写版本，一个强大的终端原生 AI 编程助手。已完成 Phase 0-5（789+ 测试通过），目标是让 Python 开发者用自己熟悉的工具拥有智能 AI 编程助手。\n\n### 2. 分层架构（7 层）\n\n```\n┌─────────────────────────────────────────┐\n│ Layer 7: Entrypoints (CLI/MCP/ACP)      │\n├─────────────────────────────────────────┤\n│ Layer 6: UI (React + Ink v5, Bun 进程)   │ ← 独立进程，JSON-RPC 通信\n├─────────────────────────────────────────┤\n│ Layer 5: Application (REPL/Session)     │\n├─────────────────────────────────────────┤\n│ Layer 4: Tools (25+ 工具实现)            │\n├─────────────────────────────────────────┤\n│ Layer 3: Services (AI/MCP/Context/Plugins) │\n├─────────────────────────────────────────┤\n│ Layer 2: Core (Config/Permissions/Tools) │\n├─────────────────────────────────────────┤\n│ Layer 1: Infrastructure (HTTP/FS/Shell) │\n└─────────────────────────────────────────┘\n```\n\n**核心原则**：低层不依赖高层，Core Layer 可在无终端环境中运行。\n\n### 3. 核心组件\n\n| 组件 | 职责 |\n|------|------|\n| **Tool 系统** | 25+ 内置工具（Bash、文件读写、Grep、Web 搜索等），基于 `Asy"
+  },
+  {
+    "id": "I6",
+    "name": "todo_write generate plan",
+    "status": "PASS",
+    "duration": 85.06,
+    "error": "",
+    "output": "STDOUT:\n现在我已经了解了项目结构和 MCP 相关的测试情况。根据 `tests/e2e/e2e_runner.py` 中的 MCP 测试部分（N1-N17），所有测试都被跳过，原因是 \"No MCP server configured\"。我需要为补齐 MCP 回归测试生成一份可执行的待办列表。\n\n已为\"补齐 MCP 回归测试\"生成了一份包含 17 项的可执行待办列表：\n\n| 序号 | 任务 |\n|------|------|\n| 1 | 搭建本地 MCP 测试服务器（stdio 模式） |\n| 2 | 编写 MCP 服务器配置并集成到测试环境 |\n| 3 | 实现 N1 测试：list MCP tools |\n| 4 | 实现 N2-N3 测试：调用 MCP read/write 工具 |\n| 5 | 实现 N4 测试：不存在 MCP 工具的错误处理 |\n| 6 | 实现 N5-N6 测试：MCP 权限拒绝/允许一次 |\n| 7 | 实现 N7 测试：MCP 服务器不可达场景 |\n| 8 | 实现 N8 测试：MCP 与原生工具权限差异 |\n| 9 | 实现 N9 测试：MCP 多传输模式发现（stdio/SSE/HTTP） |\n| 10 | 实现 N10-N11 测试：SSE/HTTP MCP 只读工具 |\n| 11 | 实现 N12 测试：MCP discover then call 完整流程 |\n| 12 | 实现 N13 测试：MCP resources list and read |\n| 13 | 实现 N14 测试：MCP 无效端点处理 |\n| 14 | 实现 N15 测试：MCP 正常/异常服务器隔离 |\n| 15 | 实现 N16 测试：MCP 初始化失败清理 |\n| 16 | 实现 N17 测试：MCP 状态一致性检查 |\n| 17 | 运行全部 MCP 回归测试并验证通过率 |\n\n当前所有 17 项 MCP 测试（N1-N17）在 `tests/e2e/e2e_runner.py` 中均被跳过，原因是没有配置 MCP 服务器。该待办列表从搭建测试服务器开始，逐项实现所有测试用例，最后验证通过率。\n\nSTDERR:\n"
+  },
+  {
+    "id": "J1",
+    "name": "plan mode: create plan",
+    "status": "PASS",
+    "duration": 58.51,
+    "error": "",
+    "output": "STDOUT:\n现在我已经了解了代码结构。让我查看一下相关的文档，了解 dry-run 参数的预期行为。\n\n现在我已经完整了解了代码结构。让我制定一个完整的计划。\n\n## 计划：为 `pode plugin install` 增加 dry-run 参数\n\n### 目标\n为 `pode plugin install` 命令添加 `--dry-run` 参数，让用户可以在不实际安装插件的情况下预览安装操作会做什么。\n\n---\n\n### 步骤\n\n#### 步骤 1：修改 `install_plugin` 函数签名（`pode_agent/services/plugins/marketplace.py`）\n- 在 `install_plugin()` 函数中添加 `dry_run: bool = False` 参数\n- 在 `_install_from_local()` 函数中添加 `dry_run: bool = False` 参数\n- 在 `_install_from_marketplace()` 函数中添加 `dry_run: bool = False` 参数\n\n#### 步骤 2：实现 dry-run 逻辑（`pode_agent/services/plugins/marketplace.py`）\n- 在 `_install_from_local()` 中：\n  - 当 `dry_run=True` 时：\n    - 不执行 `shutil.copytree()` 或 `shutil.copy2()`\n    - 不修改注册表（不调用 `_save_installed()`）\n    - 打印/记录将要执行的操作（源路径、目标路径、安装模式）\n    - 返回一个特殊的 `InstalledPlugin` 对象或抛出特殊异常来标识这是 dry-run\n- 在 `_copy_skill_pack()` 中：\n  - 添加 `dry_run: bool = False` 参数\n  - 当 `dry_run=True` 时只记录将要复制的文件，不实际复制\n\n#### 步骤 3：修改 CLI 命令（`pode_agent/entrypoints/cli.py`）\n- 在 `plugin_install()` 函数中添加 `--dry-run` 选项\n- 将 `dry_run"
+  },
+  {
+    "id": "J2",
+    "name": "plan: supplement plan",
+    "status": "SKIP",
+    "duration": 0.0,
+    "error": "Multi-turn: requires J1 session context",
+    "output": ""
+  },
+  {
+    "id": "J3",
+    "name": "plan: approve and execute",
+    "status": "SKIP",
+    "duration": 0.0,
+    "error": "Multi-turn: requires approval flow",
+    "output": ""
+  },
+  {
+    "id": "J4",
+    "name": "plan: reject and explain",
+    "status": "SKIP",
+    "duration": 0.0,
+    "error": "Multi-turn: requires rejection flow",
+    "output": ""
+  },
+  {
+    "id": "J5",
+    "name": "plan mode: enter + analyze",
+    "status": "PASS",
+    "duration": 40.86,
+    "error": "",
+    "output": "STDOUT:\n现在让我查看一下前端或 UI 相关的代码，了解用户如何看到这些状态：\n\n现在让我查看 SessionEventType 的定义，了解现有的事件类型：\n\n现在我已经充分了解了 TaskTool 的代码结构。让我总结一下分析结果并制定计划：\n\n## 分析报告：为 TaskTool 增加更清晰的用户可见状态提示\n\n### 1. 代码结构分析\n\n#### TaskTool 执行流程\n- **前台执行** (`_run_foreground`): 同步执行子代理，通过 `ToolOutput(type=\"progress\")` 实时输出进度\n- **后台执行** (`_run_background`): 异步启动子代理，立即返回，通过 `background_tasks` 注册表跟踪状态\n\n#### 当前状态提示机制\n1. **前台模式**:\n   - 启动时：`[Agent {agent_id} starting: {description}]`\n   - 进行中：`[Agent {agent_id} working...] ({tool_use_count} tool uses)` (200ms 节流)\n   - 完成/失败：输出结果摘要\n\n2. **后台模式**:\n   - 启动时：`[Agent {agent_id} launched in background] Use TaskOutput to check results.`\n   - 状态存储在 `BackgroundAgentTask` 中（包含 status, tool_use_count, duration_ms 等）\n   - 需通过 `TaskOutput` 工具主动查询\n\n3. **SessionEvent 系统**:\n   - 已有 `SUB_AGENT_STARTED`, `SUB_AGENT_PROGRESS`, `SUB_AGENT_COMPLETED`, `SUB_AGENT_FAILED` 事件类型\n   - 但当前代码只在 `query.py` 的 `_emit_subagent_events` 中发射了 `SUB_AGENT_STARTED` 和 `SUB_AGENT_COMPLETED/FAILED`\n   - **`SUB_AGENT_PROGRESS` 事件类型"
+  },
+  {
+    "id": "J6",
+    "name": "plan mode: attempt write",
+    "status": "PASS",
+    "duration": 13.01,
+    "error": "",
+    "output": "STDOUT:\n我需要先检查当前是否在计划模式中，以及该文件是否存在。让我先查看一下：\n\n让我尝试修改这个文件，看看在计划模式下会发生什么：\n\n我成功修改了 `E2E_PLAN_TEST.txt` 文件。这表明**当前不在计划模式下**。\n\n**解释：**\n\n1. **当前状态**：我目前处于**执行模式**（正常模式），而不是计划模式。在执行模式下，我可以直接对文件进行读取、写入、修改等操作。\n\n2. **计划模式的特点**：\n   - 计划模式是通过 `enter_plan_mode` 工具进入的只读探索模式\n   - 在计划模式下，代理只能读取和分析代码库，**不能进行任何修改操作**\n   - 计划模式用于在不改变代码的情况下调查问题并制定结构化执行计划\n   - 退出计划模式需要使用 `exit_plan_mode` 工具提交计划\n\n3. **为什么允许修改**：因为我当前不在计划模式中，所以所有的文件编辑工具（如 `file_edit`、`file_write`、`multi_edit` 等）都可以正常使用。\n\n如果您想测试计划模式的限制，我可以先使用 `enter_plan_mode` 进入计划模式，然后尝试修改文件，届时应该会收到不允许修改的提示。\n\nSTDERR:\n"
+  },
+  {
+    "id": "J7",
+    "name": "plan mode: minimal viable plan",
+    "status": "PASS",
+    "duration": 118.72,
+    "error": "",
+    "output": "STDOUT:\nNow I understand the structure. The user wants to add a **Doctor screen** functionality similar to Kode-Agent. Looking at the code:\n\n1. `index.tsx` - Already has the Doctor screen routing setup\n2. `Doctor.tsx` - Already exists with health checks\n3. `PermissionRequest.tsx` - Already exists with tool permission handling\n\nLet me check what might be missing or needs to be added. Let me look at the REPL screen to see if there's a way to trigger the doctor screen:\n\nNow let me check the `index.tsx` to see how the navigation is set up:\n\nNow let me check the `Doctor.tsx` screen to see what's there:\n\nNow I understand the structure. The Doctor screen exists but the checks are minimal. Looking at the Kode-Agent's Doctor screen, it should have more comprehensive checks. Let me also check if there's a `ResumeConversation` screen that needs to be integrated:\n\nNow I have a clear picture. The code structure is already in place but needs some enhancements. Let me check what the user specifically"
+  },
+  {
+    "id": "J8",
+    "name": "plan: resume unfinished",
+    "status": "SKIP",
+    "duration": 0.0,
+    "error": "Requires session persistence across runs",
+    "output": ""
+  },
+  {
+    "id": "K1",
+    "name": "list discoverable skills/commands",
+    "status": "PASS",
+    "duration": 59.13,
+    "error": "",
+    "output": "STDOUT:\n我来帮你查找当前项目中的自定义命令和技能。让我先查看项目结构，然后搜索相关的配置文件。\n\n现在让我搜索实际的技能文件和命令文件，以及查看内置命令的定义：\n\n现在让我查看命令发现服务，了解如何发现自定义命令：\n\n现在让我总结一下当前项目中可发现的自定义命令和技能。基于我对代码的分析：\n\n## 当前项目中的自定义命令和技能总结\n\n根据我对 Pode-Agent 项目的分析，以下是当前可发现的自定义命令和技能的完整列表：\n\n---\n\n### 📋 **用户可见命令 (User-Facing Commands)**\n\n这些命令通过 `/command-name` 形式由用户直接调用，`is_hidden=False`：\n\n#### **内置命令 (Built-in Commands)**\n在 `SlashCommandTool` 中硬编码，始终可用：\n\n| 命令 | 描述 | 来源 |\n|------|------|------|\n| `/help` | 显示可用命令列表 | 内置 (`_BUILTIN_COMMANDS`) |\n| `/clear` | 清空会话对话历史 | 内置 |\n| `/model` | 显示当前使用的模型 | 内置 |\n\n#### **自定义命令 (Custom Commands)**\n从以下目录动态加载的 `.md` 文件（需包含 YAML frontmatter）：\n\n| 来源 | 路径模式 | 作用域 |\n|------|---------|--------|\n| 项目级命令 | `{project}/.pode/commands/*.md` | project |\n| 用户级命令 | `~/.pode/commands/*.md` | user |\n| Agent 命令 | `{project}/.pode/agents/*/commands/*.md` | project |\n| Agent 命令 | `~/.pode/agents/*/commands/*.md` | user |\n| Plugin 命令 | `{plugin}/commands/*.md` | plugin |\n\n**当前状态**：项目中尚未创建任何自定义命令文件。\n\n---\n\n### 🔧 **隐藏技能 (Hidden Skills)**\n\n这些技能对用"
+  },
+  {
+    "id": "K2",
+    "name": "attempt code-review skill",
+    "status": "PASS",
+    "duration": 31.21,
+    "error": "",
+    "output": "STDOUT:\n让我查看一下项目中关于 skill 的实现，看看是否有适合\"代码审查\"的 skill。\n\n现在让我查看项目中已安装的 skills/commands 目录，看看是否有\"代码审查\"相关的 skill。\n\n根据我的搜索结果，我可以确认：\n\n## 没有找到适合\"代码审查\"的 skill\n\n我在当前项目中进行了以下搜索：\n\n1. **搜索 skill 文件**：没有找到任何 `.skill` 文件或 `SKILL.md` 文件\n2. **搜索 commands 文件**：没有找到任何 `COMMAND.md` 文件\n3. **搜索 skills/commands 目录**：项目中不存在 `skills/` 或 `commands/` 目录\n4. **检查用户目录**：`~/.pode/skills` 和 `~/.pode/commands` 目录也不存在\n\n虽然项目中有完整的 skill 系统实现（在 `pode_agent/tools/ai/skill.py`、`pode_agent/types/skill.py` 和 `pode_agent/services/plugins/marketplace.py` 中），但目前**没有安装任何实际的 skills**，因此也没有\"代码审查\"相关的 skill 可用。\n\n---\n\n**如果您需要代码审查功能**，您可以：\n1. 创建一个代码审查 skill（按照 `docs/skill-system.md` 规范）\n2. 或者我可以帮您手动进行代码审查——请告诉我您想审查哪些文件\n\nSTDERR:\n"
+  },
+  {
+    "id": "K3",
+    "name": "attempt commit-message command",
+    "status": "PASS",
+    "duration": 68.19,
+    "error": "",
+    "output": "STDOUT:\n根据我对项目的检查，**当前项目中没有适合\"生成 commit message\"的 command**。\n\n我检查了以下内容：\n\n1. **CLI 入口点** (`pode_agent/entrypoints/cli.py`)：没有发现与 commit 相关的命令\n2. **内置工具** (`pode_agent/tools/`)：包含文件操作、搜索、网络等工具，但没有 git commit 相关工具\n3. **自定义命令目录**：项目中不存在 `.pode/commands/` 目录\n4. **插件命令** (`pode_agent/services/plugins/commands.py`)：命令加载器会扫描多个目录查找自定义命令，但当前没有发现任何预定义的 commit message 命令\n\n如果需要使用\"生成 commit message\"功能，可以通过以下方式之一实现：\n\n1. 创建一个自定义命令文件（如 `~/.pode/commands/commit.md` 或 `.pode/commands/commit.md`）\n2. 使用 `pode -p` 打印模式直接让 AI 帮助生成 commit message\n3. 安装包含此功能的插件\n\nSTDERR:\n"
+  },
+  {
+    "id": "K4",
+    "name": "/commit slash command",
+    "status": "SKIP",
+    "duration": 0.0,
+    "error": "Slash commands require REPL interactive mode",
+    "output": ""
+  },
+  {
+    "id": "K5",
+    "name": "/review-pr slash command",
+    "status": "SKIP",
+    "duration": 0.0,
+    "error": "Slash commands require REPL interactive mode",
+    "output": ""
+  },
+  {
+    "id": "K6",
+    "name": "$ARGUMENTS in slash command",
+    "status": "SKIP",
+    "duration": 0.0,
+    "error": "No custom command fixtures",
+    "output": ""
+  },
+  {
+    "id": "K7",
+    "name": "allowed-tools restricted skill",
+    "status": "SKIP",
+    "duration": 0.0,
+    "error": "No skill fixtures",
+    "output": ""
+  },
+  {
+    "id": "K8",
+    "name": "model=haiku skill",
+    "status": "SKIP",
+    "duration": 0.0,
+    "error": "No skill fixtures",
+    "output": ""
+  },
+  {
+    "id": "K9",
+    "name": "nonexistent /not-found-command",
+    "status": "SKIP",
+    "duration": 0.0,
+    "error": "Slash commands require REPL interactive mode",
+    "output": ""
+  },
+  {
+    "id": "K10",
+    "name": "skill context injection",
+    "status": "SKIP",
+    "duration": 0.0,
+    "error": "No skill fixtures to execute",
+    "output": ""
+  },
+  {
+    "id": "O1",
+    "name": "SubAgent Explore: permissions files",
+    "status": "PASS",
+    "duration": 131.86,
+    "error": "",
+    "output": "STDOUT:\n让我重新启动一个子代理来探索权限相关文件：\n\n让我直接使用 Task 并等待结果：\n\n看起来子代理已完成但没有保留输出。让我直接执行搜索来获取权限相关文件：\n\n## Permissions 相关文件汇总\n\n### 核心实现文件（Kode-Agent 项目）\n\n**权限引擎与状态管理：**\n- `Kode-Agent/src/utils/permissions/bashToolPermissionEngine.ts` - Bash 工具权限引擎\n- `Kode-Agent/src/utils/permissions/fileToolPermissionEngine.ts` - 文件工具权限引擎\n- `Kode-Agent/src/utils/permissions/permissionModeState.ts` - 权限模式状态管理\n- `Kode-Agent/src/utils/permissions/toolPermissionContextState.ts` - 工具权限上下文状态\n- `Kode-Agent/src/utils/permissions/toolPermissionSettings.ts` - 工具权限设置\n\n**权限规则与存储：**\n- `Kode-Agent/src/core/permissions/rules/permissionKey.ts` - 权限键规则定义\n- `Kode-Agent/src/core/permissions/store/savePermission.ts` - 权限存储逻辑\n\n**类型定义：**\n- `Kode-Agent/src/types/permissionMode.ts` - 权限模式类型定义\n- `Kode-Agent/src/types/toolPermissionContext.ts` - 工具权限上下文类型\n\n**权限请求 UI 组件：**\n- `Kode-Agent/src/ui/components/permissions/PermissionRequest.tsx` - 通用权限请求组件\n- `Kode-Agent/src/ui/components/permissions/PermissionRequestTitle.tsx` - 权限请求标题\n- `Kode-Agent/s"
+  },
+  {
+    "id": "O3",
+    "name": "SubAgent background: docs scan",
+    "status": "PASS",
+    "duration": 7.46,
+    "error": "",
+    "output": "STDOUT:\nTask ID: `agent_29565e3c`\n\nSTDERR:\n"
+  },
+  {
+    "id": "O4",
+    "name": "TaskOutput: nonexistent task",
+    "status": "PASS",
+    "duration": 6.77,
+    "error": "",
+    "output": "STDOUT:\n已成功查询不存在的后台 task id `nonexistent-task-xyz`，系统返回了明确的错误信息：\n\n```\nError: Background task not found: nonexistent-task-xyz\n```\n\n这表明该 task id 不存在于后台任务列表中。\n\nSTDERR:\n"
+  },
+  {
+    "id": "O5",
+    "name": "background task status query",
+    "status": "SKIP",
+    "duration": 0.0,
+    "error": "Requires O3 task_id from prior session",
+    "output": ""
+  },
+  {
+    "id": "O6",
+    "name": "background task output read",
+    "status": "SKIP",
+    "duration": 0.0,
+    "error": "Requires O3 task_id from prior session",
+    "output": ""
+  },
+  {
+    "id": "O7",
+    "name": "resume subagent by agent_id",
+    "status": "SKIP",
+    "duration": 0.0,
+    "error": "Requires real agent_id from prior session",
+    "output": ""
+  },
+  {
+    "id": "O8",
+    "name": "foreground vs background UX",
+    "status": "SKIP",
+    "duration": 0.0,
+    "error": "Requires multi-turn session context",
+    "output": ""
+  },
+  {
+    "id": "O2",
+    "name": "SubAgent Plan: marketplace cache",
+    "status": "TIMEOUT",
+    "duration": 2047.15,
+    "error": "Timed out",
+    "output": "STDOUT:\n\nSTDERR:\nTask was destroyed but it is pending!\ntask: <Task pending name='Task-134' coro=<TaskTool._background_worker() running at D:\\duyan\\ai_agent\\Pode-Agent\\pode_agent\\tools\\agent\\task.py:560> wait_for=<Future pending cb=[Task.task_wakeup()]>>\nTask was destroyed but it is pending!\ntask: <Task pending name='Task-161' coro=<Event.wait() running at C:\\Users\\CZY\\AppData\\Roaming\\uv\\python\\cpython-3.12.12-windows-x86_64-none\\Lib\\asyncio\\locks.py:212> wait_for=<Future pending cb=[Task.task_wakeup()]>>\nTask was destroyed but it is pending!\ntask: <Task pending name='Task-160' coro=<Event.wait() running at C:\\Users\\CZY\\AppData\\Roaming\\uv\\python\\cpython-3.12.12-windows-x86_64-none\\Lib\\asyncio\\locks.py:212> wait_for=<Future pending cb=[Task.task_wakeup()]>>\nTask exception was never retrieved\nfuture: <Task finished name='Task-193' coro=<<async_generator_athrow without __name__>()> exception=RuntimeError('aclose(): asynchronous generator is already running')>\nRuntimeError: aclose(): asynch"
+  },
+  {
+    "id": "P1",
+    "name": "session: remember tag 1",
+    "status": "FAIL",
+    "duration": 14.94,
+    "error": "Error: Rate limit exceeded after 3 retries: Error code: 429 - {'error': {'code': 'throttling', 'message': 'hour allocated quota exceeded.', 'param': None, 'type': 'invalid_request_error'}, 'request_id': '81e37eb0-d1fc-90ac-837f-5df630e7d1e6'}",
+    "output": "STDOUT:\n\nSTDERR:\n[04/04/26 15:04:49] WARNING  Rate limited, retrying in 1.0s (attempt 1)        \n[04/04/26 15:04:52] WARNING  Rate limited, retrying in 2.0s (attempt 2)        \n[04/04/26 15:04:56] WARNING  Rate limited, retrying in 4.0s (attempt 3)        \nError: Rate limit exceeded after 3 retries: Error code: 429 - {'error': {'code': 'throttling', 'message': 'hour allocated quota exceeded.', 'param': None, 'type': 'invalid_request_error'}, 'request_id': '81e37eb0-d1fc-90ac-837f-5df630e7d1e6'}\n"
+  },
+  {
+    "id": "P2",
+    "name": "session: remember tag 2",
+    "status": "FAIL",
+    "duration": 14.7,
+    "error": "Error: Rate limit exceeded after 3 retries: Error code: 429 - {'error': {'code': 'throttling', 'message': 'hour allocated quota exceeded.', 'param': None, 'type': 'invalid_request_error'}, 'request_id': 'da896387-248c-99d4-8df8-1d994870f39a'}",
+    "output": "STDOUT:\n\nSTDERR:\n[04/04/26 15:05:04] WARNING  Rate limited, retrying in 1.0s (attempt 1)        \n[04/04/26 15:05:07] WARNING  Rate limited, retrying in 2.0s (attempt 2)        \n[04/04/26 15:05:10] WARNING  Rate limited, retrying in 4.0s (attempt 3)        \nError: Rate limit exceeded after 3 retries: Error code: 429 - {'error': {'code': 'throttling', 'message': 'hour allocated quota exceeded.', 'param': None, 'type': 'invalid_request_error'}, 'request_id': 'da896387-248c-99d4-8df8-1d994870f39a'}\n"
+  },
+  {
+    "id": "P3",
+    "name": "session: summarize actions",
+    "status": "FAIL",
+    "duration": 14.9,
+    "error": "Error: Rate limit exceeded after 3 retries: Error code: 429 - {'error': {'code': 'throttling', 'message': 'hour allocated quota exceeded.', 'param': None, 'type': 'invalid_request_error'}, 'request_id': '06570e12-2dc9-935f-82b0-93a7f3e1d46e'}",
+    "output": "STDOUT:\n\nSTDERR:\n[04/04/26 15:05:19] WARNING  Rate limited, retrying in 1.0s (attempt 1)        \n[04/04/26 15:05:21] WARNING  Rate limited, retrying in 2.0s (attempt 2)        \n[04/04/26 15:05:25] WARNING  Rate limited, retrying in 4.0s (attempt 3)        \nError: Rate limit exceeded after 3 retries: Error code: 429 - {'error': {'code': 'throttling', 'message': 'hour allocated quota exceeded.', 'param': None, 'type': 'invalid_request_error'}, 'request_id': '06570e12-2dc9-935f-82b0-93a7f3e1d46e'}\n"
+  },
+  {
+    "id": "P4",
+    "name": "session: recall both tags",
+    "status": "SKIP",
+    "duration": 0.0,
+    "error": "Multi-turn: requires P1+P2 session context",
+    "output": ""
+  },
+  {
+    "id": "P5",
+    "name": "session: resume across restart",
+    "status": "SKIP",
+    "duration": 0.0,
+    "error": "Requires session restore from JSONL",
+    "output": ""
+  },
+  {
+    "id": "P6",
+    "name": "session: long context keywords",
+    "status": "SKIP",
+    "duration": 0.0,
+    "error": "Multi-turn: requires P1-P5 context chain",
+    "output": ""
+  },
+  {
+    "id": "R1",
+    "name": "read nonexistent file",
+    "status": "FAIL",
+    "duration": 15.06,
+    "error": "Error: Rate limit exceeded after 3 retries: Error code: 429 - {'error': {'code': 'throttling', 'message': 'hour allocated quota exceeded.', 'param': None, 'type': 'invalid_request_error'}, 'request_id': '7a8e5399-231e-902a-b710-0aa594dc6720'}",
+    "output": "STDOUT:\n\nSTDERR:\n[04/04/26 15:05:34] WARNING  Rate limited, retrying in 1.0s (attempt 1)        \n[04/04/26 15:05:36] WARNING  Rate limited, retrying in 2.0s (attempt 2)        \n[04/04/26 15:05:40] WARNING  Rate limited, retrying in 4.0s (attempt 3)        \nError: Rate limit exceeded after 3 retries: Error code: 429 - {'error': {'code': 'throttling', 'message': 'hour allocated quota exceeded.', 'param': None, 'type': 'invalid_request_error'}, 'request_id': '7a8e5399-231e-902a-b710-0aa594dc6720'}\n"
+  },
+  {
+    "id": "R2",
+    "name": "edit nonexistent file",
+    "status": "FAIL",
+    "duration": 15.33,
+    "error": "Error: Rate limit exceeded after 3 retries: Error code: 429 - {'error': {'code': 'throttling', 'message': 'hour allocated quota exceeded.', 'param': None, 'type': 'invalid_request_error'}, 'request_id': '8e07285f-6cff-99ed-a3dc-80f628362efe'}",
+    "output": "STDOUT:\n\nSTDERR:\n[04/04/26 15:05:34] WARNING  Rate limited, retrying in 1.0s (attempt 1)        \n[04/04/26 15:05:37] WARNING  Rate limited, retrying in 2.0s (attempt 2)        \n[04/04/26 15:05:40] WARNING  Rate limited, retrying in 4.0s (attempt 3)        \nError: Rate limit exceeded after 3 retries: Error code: 429 - {'error': {'code': 'throttling', 'message': 'hour allocated quota exceeded.', 'param': None, 'type': 'invalid_request_error'}, 'request_id': '8e07285f-6cff-99ed-a3dc-80f628362efe'}\n"
+  },
+  {
+    "id": "R3",
+    "name": "write to read-only file",
+    "status": "FAIL",
+    "duration": 15.19,
+    "error": "Error: Rate limit exceeded after 3 retries: Error code: 429 - {'error': {'code': 'throttling', 'message': 'hour allocated quota exceeded.', 'param': None, 'type': 'invalid_request_error'}, 'request_id': '3500d287-ba20-9431-8ce9-7bc31236fb21'}",
+    "output": "STDOUT:\n\nSTDERR:\n[04/04/26 15:05:49] WARNING  Rate limited, retrying in 1.0s (attempt 1)        \n[04/04/26 15:05:51] WARNING  Rate limited, retrying in 2.0s (attempt 2)        \n[04/04/26 15:05:55] WARNING  Rate limited, retrying in 4.0s (attempt 3)        \nError: Rate limit exceeded after 3 retries: Error code: 429 - {'error': {'code': 'throttling', 'message': 'hour allocated quota exceeded.', 'param': None, 'type': 'invalid_request_error'}, 'request_id': '3500d287-ba20-9431-8ce9-7bc31236fb21'}\n"
+  },
+  {
+    "id": "R4",
+    "name": "timeout command",
+    "status": "FAIL",
+    "duration": 15.0,
+    "error": "Error: Rate limit exceeded after 3 retries: Error code: 429 - {'error': {'code': 'throttling', 'message': 'hour allocated quota exceeded.', 'param': None, 'type': 'invalid_request_error'}, 'request_id': '06d3053e-1d9d-9a70-9b0e-705e9eb51d9c'}",
+    "output": "STDOUT:\n\nSTDERR:\n[04/04/26 15:05:49] WARNING  Rate limited, retrying in 1.0s (attempt 1)        \n[04/04/26 15:05:52] WARNING  Rate limited, retrying in 2.0s (attempt 2)        \n[04/04/26 15:05:55] WARNING  Rate limited, retrying in 4.0s (attempt 3)        \nError: Rate limit exceeded after 3 retries: Error code: 429 - {'error': {'code': 'throttling', 'message': 'hour allocated quota exceeded.', 'param': None, 'type': 'invalid_request_error'}, 'request_id': '06d3053e-1d9d-9a70-9b0e-705e9eb51d9c'}\n"
+  },
+  {
+    "id": "R5",
+    "name": "fetch unreachable URL",
+    "status": "FAIL",
+    "duration": 15.17,
+    "error": "Error: Rate limit exceeded after 3 retries: Error code: 429 - {'error': {'code': 'throttling', 'message': 'hour allocated quota exceeded.', 'param': None, 'type': 'invalid_request_error'}, 'request_id': '80ed9d04-a006-97d1-9962-a7e257956190'}",
+    "output": "STDOUT:\n\nSTDERR:\n[04/04/26 15:06:04] WARNING  Rate limited, retrying in 1.0s (attempt 1)        \n[04/04/26 15:06:07] WARNING  Rate limited, retrying in 2.0s (attempt 2)        \n[04/04/26 15:06:10] WARNING  Rate limited, retrying in 4.0s (attempt 3)        \nError: Rate limit exceeded after 3 retries: Error code: 429 - {'error': {'code': 'throttling', 'message': 'hour allocated quota exceeded.', 'param': None, 'type': 'invalid_request_error'}, 'request_id': '80ed9d04-a006-97d1-9962-a7e257956190'}\n"
+  },
+  {
+    "id": "R6",
+    "name": "search nonexistent symbol",
+    "status": "FAIL",
+    "duration": 15.09,
+    "error": "Error: Rate limit exceeded after 3 retries: Error code: 429 - {'error': {'code': 'throttling', 'message': 'hour allocated quota exceeded.', 'param': None, 'type': 'invalid_request_error'}, 'request_id': 'acb395e1-46e9-9d1d-8c40-f86c6d58bdae'}",
+    "output": "STDOUT:\n\nSTDERR:\n[04/04/26 15:06:04] WARNING  Rate limited, retrying in 1.0s (attempt 1)        \n[04/04/26 15:06:07] WARNING  Rate limited, retrying in 2.0s (attempt 2)        \n[04/04/26 15:06:10] WARNING  Rate limited, retrying in 4.0s (attempt 3)        \nError: Rate limit exceeded after 3 retries: Error code: 429 - {'error': {'code': 'throttling', 'message': 'hour allocated quota exceeded.', 'param': None, 'type': 'invalid_request_error'}, 'request_id': 'acb395e1-46e9-9d1d-8c40-f86c6d58bdae'}\n"
+  },
+  {
+    "id": "R8",
+    "name": "install invalid plugin",
+    "status": "PASS",
+    "duration": 0.44,
+    "error": "",
+    "output": "Error: Source path does not exist: nonexistent_plugin_dir"
+  },
+  {
+    "id": "R9",
+    "name": "broken marketplace source",
+    "status": "PASS",
+    "duration": 0.43,
+    "error": "",
+    "output": "Error: Source path does not exist: nonexistent.json"
+  },
+  {
+    "id": "R10",
+    "name": "REPL no Bun error",
+    "status": "PASS",
+    "duration": 0.42,
+    "error": "",
+    "output": "Error: Pode-Agent requires an interactive terminal (TTY).\n\nIf running from a script or pipe, use print mode instead:\n  pode -p \"your prompt here\"\n\nOr run directly in a terminal:\n  uv run pode\n"
+  },
+  {
+    "id": "R7",
+    "name": "SubAgent nonexistent type",
+    "status": "FAIL",
+    "duration": 15.04,
+    "error": "Error: Rate limit exceeded after 3 retries: Error code: 429 - {'error': {'code': 'throttling', 'message': 'hour allocated quota exceeded.', 'param': None, 'type': 'invalid_request_error'}, 'request_id': '91079815-0d2b-9245-bc78-68a2e78f6fb6'}",
+    "output": "STDOUT:\n\nSTDERR:\n[04/04/26 15:06:19] WARNING  Rate limited, retrying in 1.0s (attempt 1)        \n[04/04/26 15:06:22] WARNING  Rate limited, retrying in 2.0s (attempt 2)        \n[04/04/26 15:06:25] WARNING  Rate limited, retrying in 4.0s (attempt 3)        \nError: Rate limit exceeded after 3 retries: Error code: 429 - {'error': {'code': 'throttling', 'message': 'hour allocated quota exceeded.', 'param': None, 'type': 'invalid_request_error'}, 'request_id': '91079815-0d2b-9245-bc78-68a2e78f6fb6'}\n"
+  },
+  {
+    "id": "R11",
+    "name": "read sensitive path",
+    "status": "FAIL",
+    "duration": 15.53,
+    "error": "Error: Rate limit exceeded after 3 retries: Error code: 429 - {'error': {'code': 'throttling', 'message': 'hour allocated quota exceeded.', 'param': None, 'type': 'invalid_request_error'}, 'request_id': '2d21a261-5ed3-951e-97cb-9fd820972e9c'}",
+    "output": "STDOUT:\n\nSTDERR:\n[04/04/26 15:06:21] WARNING  Rate limited, retrying in 1.0s (attempt 1)        \n[04/04/26 15:06:24] WARNING  Rate limited, retrying in 2.0s (attempt 2)        \n[04/04/26 15:06:27] WARNING  Rate limited, retrying in 4.0s (attempt 3)        \nError: Rate limit exceeded after 3 retries: Error code: 429 - {'error': {'code': 'throttling', 'message': 'hour allocated quota exceeded.', 'param': None, 'type': 'invalid_request_error'}, 'request_id': '2d21a261-5ed3-951e-97cb-9fd820972e9c'}\n"
+  },
+  {
+    "id": "R13",
+    "name": "MCP missing url config error",
+    "status": "SKIP",
+    "duration": 0.0,
+    "error": "No MCP server configured",
+    "output": ""
+  },
+  {
+    "id": "R14",
+    "name": "MCP invalid JSON-RPC endpoint",
+    "status": "SKIP",
+    "duration": 0.0,
+    "error": "No MCP server configured",
+    "output": ""
+  },
+  {
+    "id": "R15",
+    "name": "MCP partial failure detection",
+    "status": "SKIP",
+    "duration": 0.0,
+    "error": "No MCP server configured",
+    "output": ""
+  },
+  {
+    "id": "R12",
+    "name": "permission denied retry",
+    "status": "FAIL",
+    "duration": 14.8,
+    "error": "Error: Rate limit exceeded after 3 retries: Error code: 429 - {'error': {'code': 'throttling', 'message': 'hour allocated quota exceeded.', 'param': None, 'type': 'invalid_request_error'}, 'request_id': '6b1a7c83-a088-99e5-9bd7-e6f15b465128'}",
+    "output": "STDOUT:\n\nSTDERR:\n[04/04/26 15:06:34] WARNING  Rate limited, retrying in 1.0s (attempt 1)        \n[04/04/26 15:06:37] WARNING  Rate limited, retrying in 2.0s (attempt 2)        \n[04/04/26 15:06:40] WARNING  Rate limited, retrying in 4.0s (attempt 3)        \nError: Rate limit exceeded after 3 retries: Error code: 429 - {'error': {'code': 'throttling', 'message': 'hour allocated quota exceeded.', 'param': None, 'type': 'invalid_request_error'}, 'request_id': '6b1a7c83-a088-99e5-9bd7-e6f15b465128'}\n"
+  },
+  {
+    "id": "M1",
+    "name": "user_prompt_submit hook",
+    "status": "SKIP",
+    "duration": 0.0,
+    "error": "No hook configuration",
+    "output": ""
+  },
+  {
+    "id": "M2",
+    "name": "pre_tool_use hook block",
+    "status": "SKIP",
+    "duration": 0.0,
+    "error": "No hook configuration",
+    "output": ""
+  },
+  {
+    "id": "M3",
+    "name": "post_tool_use hook audit",
+    "status": "SKIP",
+    "duration": 0.0,
+    "error": "No hook configuration",
+    "output": ""
+  },
+  {
+    "id": "M4",
+    "name": "stop hook completeness",
+    "status": "SKIP",
+    "duration": 0.0,
+    "error": "No hook configuration",
+    "output": ""
+  },
+  {
+    "id": "M5",
+    "name": "stop hook continuation",
+    "status": "SKIP",
+    "duration": 0.0,
+    "error": "No hook configuration",
+    "output": ""
+  },
+  {
+    "id": "M6",
+    "name": "hook path rewrite",
+    "status": "SKIP",
+    "duration": 0.0,
+    "error": "No hook configuration",
+    "output": ""
+  },
+  {
+    "id": "M7",
+    "name": "hook system prompt injection",
+    "status": "SKIP",
+    "duration": 0.0,
+    "error": "No hook configuration",
+    "output": ""
+  },
+  {
+    "id": "M8",
+    "name": "hook reentry stability",
+    "status": "SKIP",
+    "duration": 0.0,
+    "error": "No hook configuration",
+    "output": ""
+  },
+  {
+    "id": "N1",
+    "name": "list MCP tools",
+    "status": "SKIP",
+    "duration": 0.0,
+    "error": "No MCP server configured",
+    "output": ""
+  },
+  {
+    "id": "N2",
+    "name": "call MCP read tool",
+    "status": "SKIP",
+    "duration": 0.0,
+    "error": "No MCP server configured",
+    "output": ""
+  },
+  {
+    "id": "N3",
+    "name": "call MCP write tool",
+    "status": "SKIP",
+    "duration": 0.0,
+    "error": "No MCP server configured",
+    "output": ""
+  },
+  {
+    "id": "N4",
+    "name": "nonexistent MCP tool",
+    "status": "SKIP",
+    "duration": 0.0,
+    "error": "No MCP server configured",
+    "output": ""
+  },
+  {
+    "id": "N5",
+    "name": "MCP permission denied",
+    "status": "SKIP",
+    "duration": 0.0,
+    "error": "No MCP server configured",
+    "output": ""
+  },
+  {
+    "id": "N6",
+    "name": "MCP permission allow once",
+    "status": "SKIP",
+    "duration": 0.0,
+    "error": "No MCP server configured",
+    "output": ""
+  },
+  {
+    "id": "N7",
+    "name": "MCP server unreachable",
+    "status": "SKIP",
+    "duration": 0.0,
+    "error": "No MCP server configured",
+    "output": ""
+  },
+  {
+    "id": "N8",
+    "name": "MCP vs native permission diff",
+    "status": "SKIP",
+    "duration": 0.0,
+    "error": "No MCP server configured",
+    "output": ""
+  },
+  {
+    "id": "N9",
+    "name": "MCP transport listing (stdio/SSE/HTTP)",
+    "status": "SKIP",
+    "duration": 0.0,
+    "error": "No MCP server configured",
+    "output": ""
+  },
+  {
+    "id": "N10",
+    "name": "SSE MCP read-only tool",
+    "status": "SKIP",
+    "duration": 0.0,
+    "error": "No SSE MCP server configured",
+    "output": ""
+  },
+  {
+    "id": "N11",
+    "name": "HTTP MCP read-only tool",
+    "status": "SKIP",
+    "duration": 0.0,
+    "error": "No HTTP MCP server configured",
+    "output": ""
+  },
+  {
+    "id": "N12",
+    "name": "MCP discover then call roundtrip",
+    "status": "SKIP",
+    "duration": 0.0,
+    "error": "No MCP server configured",
+    "output": ""
+  },
+  {
+    "id": "N13",
+    "name": "MCP resources list and read",
+    "status": "SKIP",
+    "duration": 0.0,
+    "error": "No MCP server configured",
+    "output": ""
+  },
+  {
+    "id": "N14",
+    "name": "MCP invalid endpoint handling",
+    "status": "SKIP",
+    "duration": 0.0,
+    "error": "No MCP server configured",
+    "output": ""
+  },
+  {
+    "id": "N15",
+    "name": "MCP normal + abnormal server isolation",
+    "status": "SKIP",
+    "duration": 0.0,
+    "error": "No MCP server configured",
+    "output": ""
+  },
+  {
+    "id": "N16",
+    "name": "MCP initialize failure cleanup",
+    "status": "SKIP",
+    "duration": 0.0,
+    "error": "No MCP server configured",
+    "output": ""
+  },
+  {
+    "id": "N17",
+    "name": "MCP status consistency check",
+    "status": "SKIP",
+    "duration": 0.0,
+    "error": "No MCP server configured",
+    "output": ""
+  },
+  {
+    "id": "S1",
+    "name": "integration: plan E2E test cases",
+    "status": "FAIL",
+    "duration": 14.84,
+    "error": "Error: Rate limit exceeded after 3 retries: Error code: 429 - {'error': {'code': 'throttling', 'message': 'hour allocated quota exceeded.', 'param': None, 'type': 'invalid_request_error'}, 'request_id': '0c590392-60a1-9160-a317-5add17868804'}",
+    "output": "STDOUT:\n\nSTDERR:\n[04/04/26 15:06:49] WARNING  Rate limited, retrying in 1.0s (attempt 1)        \n[04/04/26 15:06:52] WARNING  Rate limited, retrying in 2.0s (attempt 2)        \n[04/04/26 15:06:55] WARNING  Rate limited, retrying in 4.0s (attempt 3)        \nError: Rate limit exceeded after 3 retries: Error code: 429 - {'error': {'code': 'throttling', 'message': 'hour allocated quota exceeded.', 'param': None, 'type': 'invalid_request_error'}, 'request_id': '0c590392-60a1-9160-a317-5add17868804'}\n"
+  },
+  {
+    "id": "S2",
+    "name": "integration: create test doc draft",
+    "status": "FAIL",
+    "duration": 15.28,
+    "error": "Error: Rate limit exceeded after 3 retries: Error code: 429 - {'error': {'code': 'throttling', 'message': 'hour allocated quota exceeded.', 'param': None, 'type': 'invalid_request_error'}, 'request_id': 'db68c4e8-6b7e-9b5c-b3b8-4dc6272af4dc'}",
+    "output": "STDOUT:\n\nSTDERR:\n[04/04/26 15:07:04] WARNING  Rate limited, retrying in 1.0s (attempt 1)        \n[04/04/26 15:07:07] WARNING  Rate limited, retrying in 2.0s (attempt 2)        \n[04/04/26 15:07:10] WARNING  Rate limited, retrying in 4.0s (attempt 3)        \nError: Rate limit exceeded after 3 retries: Error code: 429 - {'error': {'code': 'throttling', 'message': 'hour allocated quota exceeded.', 'param': None, 'type': 'invalid_request_error'}, 'request_id': 'db68c4e8-6b7e-9b5c-b3b8-4dc6272af4dc'}\n"
+  },
+  {
+    "id": "S3",
+    "name": "integration: extend test doc",
+    "status": "FAIL",
+    "duration": 16.57,
+    "error": "Error: Rate limit exceeded after 3 retries: Error code: 429 - {'error': {'code': 'throttling', 'message': 'hour allocated quota exceeded.', 'param': None, 'type': 'invalid_request_error'}, 'request_id': '7f3f6064-3875-9435-b56e-275b3c7178f1'}",
+    "output": "STDOUT:\n\nSTDERR:\n[04/04/26 15:07:20] WARNING  Rate limited, retrying in 1.0s (attempt 1)        \n[04/04/26 15:07:23] WARNING  Rate limited, retrying in 2.0s (attempt 2)        \n[04/04/26 15:07:26] WARNING  Rate limited, retrying in 4.0s (attempt 3)        \nError: Rate limit exceeded after 3 retries: Error code: 429 - {'error': {'code': 'throttling', 'message': 'hour allocated quota exceeded.', 'param': None, 'type': 'invalid_request_error'}, 'request_id': '7f3f6064-3875-9435-b56e-275b3c7178f1'}\n"
+  },
+  {
+    "id": "S4",
+    "name": "integration: SubAgent + main agent",
+    "status": "FAIL",
+    "duration": 15.02,
+    "error": "Error: Rate limit exceeded after 3 retries: Error code: 429 - {'error': {'code': 'throttling', 'message': 'hour allocated quota exceeded.', 'param': None, 'type': 'invalid_request_error'}, 'request_id': '3bf4408c-ccc7-9427-b130-aa7cc4c1897c'}",
+    "output": "STDOUT:\n\nSTDERR:\n[04/04/26 15:07:36] WARNING  Rate limited, retrying in 1.0s (attempt 1)        \n[04/04/26 15:07:38] WARNING  Rate limited, retrying in 2.0s (attempt 2)        \n[04/04/26 15:07:42] WARNING  Rate limited, retrying in 4.0s (attempt 3)        \nError: Rate limit exceeded after 3 retries: Error code: 429 - {'error': {'code': 'throttling', 'message': 'hour allocated quota exceeded.', 'param': None, 'type': 'invalid_request_error'}, 'request_id': '3bf4408c-ccc7-9427-b130-aa7cc4c1897c'}\n"
+  },
+  {
+    "id": "S5",
+    "name": "integration: final summary",
+    "status": "FAIL",
+    "duration": 15.49,
+    "error": "Error: Rate limit exceeded after 3 retries: Error code: 429 - {'error': {'code': 'throttling', 'message': 'hour allocated quota exceeded.', 'param': None, 'type': 'invalid_request_error'}, 'request_id': '710f84a5-7479-9bc2-9836-f27ff09a05bd'}",
+    "output": "STDOUT:\n\nSTDERR:\n[04/04/26 15:07:51] WARNING  Rate limited, retrying in 1.0s (attempt 1)        \n[04/04/26 15:07:53] WARNING  Rate limited, retrying in 2.0s (attempt 2)        \n[04/04/26 15:07:57] WARNING  Rate limited, retrying in 4.0s (attempt 3)        \nError: Rate limit exceeded after 3 retries: Error code: 429 - {'error': {'code': 'throttling', 'message': 'hour allocated quota exceeded.', 'param': None, 'type': 'invalid_request_error'}, 'request_id': '710f84a5-7479-9bc2-9836-f27ff09a05bd'}\n"
+  },
+  {
+    "id": "S6",
+    "name": "MCP transport integration test",
+    "status": "SKIP",
+    "duration": 0.0,
+    "error": "No MCP server configured",
+    "output": ""
+  },
+  {
+    "id": "C1",
+    "name": "REPL startup",
+    "status": "PASS",
+    "duration": 0.0,
+    "error": "",
+    "output": "Error: Pode-Agent requires an interactive terminal (TTY).\r\n\r\nIf running from a script or pipe, use print mode instead:\r\n  pode -p \"your prompt here\"\r\n\r\nOr run directly in a terminal:\r\n  uv run pode\r\n"
+  }
+]

@@ -5,14 +5,13 @@ Tests process_input(), cost tracking, permission resolution, and log restoration
 
 from __future__ import annotations
 
-import asyncio
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
 from pode_agent.app.session import SessionManager
-from pode_agent.core.permissions.types import PermissionContext, PermissionDecision
+from pode_agent.core.permissions.types import PermissionDecision
 from pode_agent.types.session_events import SessionEvent, SessionEventType
 
 
@@ -171,12 +170,22 @@ class TestSessionManagerLoadFromLog:
         sm = SessionManager.load_from_log(str(log_file))
         assert len(sm.get_messages()) == 1
 
+    def test_load_from_log_reuses_same_log_file_for_writes(self, tmp_path: Any) -> None:
+        import json
+
+        log_file = tmp_path / "resume.jsonl"
+        log_file.write_text(json.dumps({"type": "user", "message": "hello"}) + "\n")
+
+        sm = SessionManager.load_from_log(str(log_file))
+        sm.replace_messages([{"type": "assistant", "message": "summary"}])
+
+        lines = [line for line in log_file.read_text().splitlines() if line]
+        assert len(lines) == 1
+        assert json.loads(lines[0])["message"] == "summary"
+
 
 class TestSessionManagerPermission:
     def test_resolve_permission(self) -> None:
         sm = SessionManager()
         sm.resolve_permission(PermissionDecision.ALLOW_ONCE)
         assert sm._last_permission_decision == PermissionDecision.ALLOW_ONCE
-
-
-import pytest  # noqa: E402

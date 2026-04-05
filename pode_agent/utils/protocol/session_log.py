@@ -12,6 +12,7 @@ import json
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 from pode_agent.core.config.defaults import get_config_dir
 from pode_agent.infra.logging import get_logger
@@ -32,8 +33,9 @@ def get_session_log_path(
         base_dir = get_config_dir() / "logs"
     base_dir.mkdir(parents=True, exist_ok=True)
 
-    date_str = datetime.now().strftime("%Y-%m-%d")
-    filename = f"{date_str}_session_fork_{fork_number}.jsonl"
+    date_str = datetime.now().strftime("%Y-%m-%d_%H-%M-%S-%f")
+    session_id = uuid4().hex[:8]
+    filename = f"{date_str}_{session_id}_session_fork_{fork_number}.jsonl"
     return base_dir / filename
 
 
@@ -46,6 +48,17 @@ def save_message(log_path: Path, message: dict[str, Any]) -> None:
     log_path.parent.mkdir(parents=True, exist_ok=True)
     with open(log_path, "a", encoding="utf-8") as f:
         f.write(line + "\n")
+
+
+def rewrite_messages(log_path: Path, messages: list[dict[str, Any]]) -> None:
+    """Rewrite the JSONL log with a compacted message history."""
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = log_path.with_suffix(f"{log_path.suffix}.tmp")
+    with open(temp_path, "w", encoding="utf-8") as f:
+        for message in messages:
+            line = json.dumps(message, default=str, ensure_ascii=False)
+            f.write(line + "\n")
+    temp_path.replace(log_path)
 
 
 def load_messages_from_log(log_path: Path) -> list[dict[str, Any]]:

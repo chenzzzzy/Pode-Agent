@@ -138,6 +138,41 @@ _PREFIX_ROUTING: list[tuple[str, ProviderType]] = [
 ]
 
 
+# Model-prefix → env var mapping for OPENAI_COMPAT providers
+_COMPAT_ENV_PREFIXES: list[tuple[str, str, str]] = [
+    # (model_prefix, api_key_env, base_url_env)
+    ("glm-", "GLM_API_KEY", "GLM_BASE_URL"),
+    ("qwen", "DASHSCOPE_API_KEY", "DASHSCOPE_BASE_URL"),
+    ("qwq-", "DASHSCOPE_API_KEY", "DASHSCOPE_BASE_URL"),
+    ("deepseek-", "DEEPSEEK_API_KEY", "DEEPSEEK_BASE_URL"),
+    ("moonshot-", "MOONSHOT_API_KEY", "MOONSHOT_BASE_URL"),
+]
+
+
+def _resolve_compat_env_vars(model_name: str) -> tuple[str, str]:
+    """Resolve base_url and api_key env vars for an OPENAI_COMPAT model.
+
+    Uses model prefix to pick the right provider-specific env vars,
+    falling back to generic OPENAI_*/DASHSCOPE_* vars.
+    """
+    # Try model-specific env vars first
+    for prefix, key_env, url_env in _COMPAT_ENV_PREFIXES:
+        if model_name.startswith(prefix):
+            api_key = os.environ.get(key_env, "")
+            base_url = os.environ.get(url_env, "")
+            if api_key:
+                return base_url, api_key
+
+    # Fallback: generic env vars
+    base_url = os.environ.get("OPENAI_BASE_URL", "") or os.environ.get(
+        "DASHSCOPE_BASE_URL", ""
+    )
+    api_key = os.environ.get("OPENAI_API_KEY", "") or os.environ.get(
+        "DASHSCOPE_API_KEY", ""
+    )
+    return base_url, api_key
+
+
 class ModelAdapterFactory:
     """Routes model names to the appropriate AIProvider."""
 
@@ -176,7 +211,7 @@ class ModelAdapterFactory:
             raise ValueError(f"No provider registered for type: {provider_type}")
 
         provider_class = _load_provider_class(module_path, class_name)
-        kwargs = _build_provider_kwargs(provider_type, config)
+        kwargs = _build_provider_kwargs(provider_type, config, model_name)
         return provider_class(**kwargs)
 
     @staticmethod
@@ -252,18 +287,15 @@ def _load_provider_class(module_path: str, class_name: str) -> type[AIProvider]:
 def _build_provider_kwargs(
     provider_type: ProviderType,
     config: GlobalConfig | None,
+    model_name: str = "",
 ) -> dict[str, Any]:
     """Build kwargs dict for provider constructor from config."""
     kwargs: dict[str, Any] = {}
 
     # For OPENAI_COMPAT providers, auto-detect base_url and api_key from env
+    # Use model-prefix-aware env var lookup for multi-provider support
     if provider_type == ProviderType.OPENAI_COMPAT:
-        base_url = os.environ.get("OPENAI_BASE_URL", "") or os.environ.get(
-            "DASHSCOPE_BASE_URL", ""
-        )
-        api_key = os.environ.get("OPENAI_API_KEY", "") or os.environ.get(
-            "DASHSCOPE_API_KEY", ""
-        )
+        base_url, api_key = _resolve_compat_env_vars(model_name)
         if base_url:
             kwargs["base_url"] = base_url
         if api_key:
@@ -383,6 +415,13 @@ def validate_provider_config(
     # Check environment variable
     if os.environ.get(env_var):
         api_key_found = True
+
+    # For OPENAI_COMPAT, check model-specific env vars
+    if not api_key_found and provider_type == ProviderType.OPENAI_COMPAT:
+        for prefix, key_env, _url_env in _COMPAT_ENV_PREFIXES:
+            if model_name.startswith(prefix) and os.environ.get(key_env):
+                api_key_found = True
+                break
 
     # Check DASHSCOPE_API_KEY for openai-compat (Alibaba Cloud)
     if (

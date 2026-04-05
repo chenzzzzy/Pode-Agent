@@ -1,0 +1,13 @@
+{
+  "name": "test-marketplace",
+  "url": "file://D:\\duyan\\ai_agent\\Pode-Agent\\tests\\fixtures\\test-marketplace.json",
+  "plugins": [
+    {
+      "name": "test-echo-plugin",
+      "version": "1.0.0",
+      "description": "Echo plugin for testing",
+      "source": "D:\\duyan\\ai_agent\\Pode-Agent\\tests\\fixtures\\test-plugin",
+      "install_mode": "dir"
+    }
+  ]
+}

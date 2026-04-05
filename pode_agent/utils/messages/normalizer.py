@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from pode_agent.app.compact import truncate_tool_result_content
 from pode_agent.core.config.schema import ProviderType
 from pode_agent.services.ai.base import ToolUseBlock
 
@@ -129,7 +130,7 @@ def build_tool_result_message(
         content_blocks.append({
             "type": "tool_result",
             "tool_use_id": tu.id,
-            "content": result_text,
+            "content": truncate_tool_result_content(result_text),
         })
 
     return {

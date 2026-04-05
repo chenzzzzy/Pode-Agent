@@ -10,8 +10,6 @@ import json
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
-
 from pode_agent.app.query import (
     QueryOptions,
     _build_tool_definitions,
@@ -25,10 +23,8 @@ from pode_agent.core.permissions.types import PermissionContext, PermissionMode
 from pode_agent.services.ai.base import (
     AIResponse,
     TokenUsage,
-    ToolUseBlock,
 )
 from pode_agent.types.session_events import SessionEvent, SessionEventType
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -50,7 +46,11 @@ def _make_session(
     def save_message(msg: dict[str, Any]) -> None:
         session._messages.append(msg)
 
+    def replace_messages(msgs: list[dict[str, Any]]) -> None:
+        session._messages = list(msgs)
+
     session.save_message = save_message
+    session.replace_messages = replace_messages
     session.get_messages = lambda: list(session._messages)
     session.tools = tools or []
     return session
@@ -252,6 +252,28 @@ class TestQueryCore:
             assistant_msgs = [m for m in saved if m.get("type") == "assistant"]
             assert len(assistant_msgs) == 1
 
+    async def test_usage_event_includes_token_counts(self) -> None:
+        mock_fn = _make_mock_query_llm([_text_response("Usage please!")])
+        with patch("pode_agent.app.query.query_llm", side_effect=mock_fn):
+            session = _make_session()
+            options = _make_options()
+
+            events = []
+            async for event in query_core(
+                messages=[],
+                system_prompt="You are helpful",
+                tools=[],
+                session=session,
+                options=options,
+            ):
+                events.append(event)
+
+            usage_events = [e for e in events if e.type == SessionEventType.COST_UPDATE]
+            assert len(usage_events) == 1
+            assert usage_events[0].data["input_tokens"] == 100
+            assert usage_events[0].data["output_tokens"] == 50
+            assert usage_events[0].data["total_tokens"] == 150
+
     async def test_error_response_yields_model_error(self) -> None:
         async def _error_fn(params: Any, config: Any = None) -> Any:
             yield AIResponse(type="error", error_message="API failed", is_retriable=True)
@@ -386,7 +408,10 @@ class TestAutoCompact:
         mock_fn = _make_mock_query_llm([_text_response("ok")])
         with (
             patch("pode_agent.app.query.query_llm", side_effect=mock_fn),
-            patch("pode_agent.app.query.auto_compact_if_needed", return_value=[]) as mock_compact,
+            patch(
+                "pode_agent.app.query.auto_compact_if_needed",
+                new=AsyncMock(return_value=[]),
+            ) as mock_compact,
         ):
             session = _make_session()
             options = _make_options()
@@ -409,7 +434,10 @@ class TestAutoCompact:
         mock_fn = _make_mock_query_llm([_text_response("ok")])
         with (
             patch("pode_agent.app.query.query_llm", side_effect=mock_fn),
-            patch("pode_agent.app.query.auto_compact_if_needed", return_value=trimmed),
+            patch(
+                "pode_agent.app.query.auto_compact_if_needed",
+                new=AsyncMock(return_value=trimmed),
+            ),
         ):
             session = _make_session()
             options = _make_options()
@@ -423,9 +451,8 @@ class TestAutoCompact:
             ):
                 pass
 
-            # The compacted messages (1) should have been used, not the originals (100)
-            # Verify by checking the saved assistant message exists
             saved = session.get_messages()
+            assert saved[0]["message"] == "compact: ..."
             assistant_msgs = [m for m in saved if m.get("type") == "assistant"]
             assert len(assistant_msgs) == 1
 

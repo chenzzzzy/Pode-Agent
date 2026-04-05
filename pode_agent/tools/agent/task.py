@@ -383,7 +383,9 @@ class TaskTool(Tool):
         options = QueryOptions(
             model=model,
             cwd=str(os.getcwd()),
-            permission_mode=context.options.permission_mode,
+            permission_mode=PermissionMode(context.options.permission_mode)
+            if context.options.permission_mode
+            else PermissionMode.BYPASS_PERMISSIONS,
             safe_mode=context.options.safe_mode,
         )
 

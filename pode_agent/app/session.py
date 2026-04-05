@@ -25,6 +25,7 @@ from pode_agent.types.session_events import SessionEvent, SessionEventType
 from pode_agent.utils.protocol.session_log import (
     get_session_log_path,
     load_messages_from_log,
+    rewrite_messages,
     save_message,
 )
 
@@ -71,15 +72,17 @@ class SessionManager:
         self._last_permission_decision: PermissionDecision | None = None
 
         # JSONL log
-        self._log_path = get_session_log_path(fork_number=fork_number)
+        self._log_path = (
+            Path(message_log_name)
+            if message_log_name is not None
+            else get_session_log_path(fork_number=fork_number)
+        )
 
         # If a log name was given, try to load existing messages
-        if message_log_name:
-            log_file = Path(message_log_name)
-            if log_file.exists():
-                loaded = load_messages_from_log(log_file)
-                if loaded:
-                    self._messages = loaded
+        if message_log_name and self._log_path.exists():
+            loaded = load_messages_from_log(self._log_path)
+            if loaded:
+                self._messages = loaded
 
     @property
     def tools(self) -> list[Tool]:
@@ -113,6 +116,11 @@ class SessionManager:
         """Append a message to the in-memory list and persist to JSONL."""
         self._messages.append(message)
         save_message(self._log_path, message)
+
+    def replace_messages(self, messages: list[dict[str, Any]]) -> None:
+        """Replace the in-memory history and rewrite the session log."""
+        self._messages = list(messages)
+        rewrite_messages(self._log_path, self._messages)
 
     def abort(self) -> None:
         """Signal that the current operation should be aborted."""
